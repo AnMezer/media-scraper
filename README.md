@@ -1,4 +1,4 @@
-# Media Scrapper
+# Media Scraper
 
 Автоматический скрапер метаданных для локальной медиатеки.  
 Получает информацию о фильмах с **Кинопоиска** через [kinopoiskapiunofficial](https://kinopoiskapiunofficial.tech) и создаёт файлы в формате, совместимом с **Kodi**:
