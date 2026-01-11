@@ -547,6 +547,7 @@ def main():
             if error_message != latest_error_msg:
                 try:
                     send_message(bot, error_message)
+                    latest_error_msg = error_message
                 except Exception:
                     logger.error('Ошибка при отправке сообщения')
         time.sleep(120)
