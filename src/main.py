@@ -6,6 +6,7 @@ from http import HTTPStatus
 from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
 from cachetools.func import ttl_cache
+from datetime import datetime
 
 import requests
 from requests.exceptions import RequestException
@@ -25,18 +26,24 @@ from config.settings import (
     X_API_KEY,
     YEAR_STAMP,
     GET_ID_CACHE_SIZE,
-    GET_ID_TTL
+    GET_ID_TTL,
+    DAY_LIMIT,
+    SECOND_LIMIT
 )
 
-from .exceptions import (
+from .utils.exceptions import (
     APIAnswerWrongDataError,
     APIConnectionError,
     MissingVariableError,
     NoFilmsError,
     NoYearError,
 )
-from .logger import setup_logger
-from .utils.validation import validate_types
+from .utils.logger import setup_logger
+from .utils.validators import validate_types, check_request_status
+
+_requests_per_day = 0
+_requests_per_second = 0
+_last_api_call_at: datetime
 
 SPLITTERS = r'[_.()]'
 
@@ -149,7 +156,7 @@ def is_nfo_file_exists(video_file_name: str, files: list) -> bool:
 
 
 @ttl_cache(maxsize=GET_ID_CACHE_SIZE, ttl=GET_ID_TTL)
-def get_film_id(title: str, year: str) -> tuple[bool, str, str]:
+def get_film_id(title: str, year: str) -> tuple[bool, str, str] | None:
     """Отправляет запрос к kinopoiskapiunofficial API для поиска
       kinopoisk_id фильма.
     Ищет в ответе совпадение по году выпуска,
@@ -186,16 +193,18 @@ def get_film_id(title: str, year: str) -> tuple[bool, str, str]:
     except RequestException as e:
         message = (f'Ошибка при получении ответа от API {request_params}: {e}')
         raise APIConnectionError(message)
-    if request_films.status_code != HTTPStatus.OK:
-        raise APIConnectionError(
-            f'API вернул код: {request_films.status_code}')
-    response_data = request_films.json()
-    validate_types(response_data=(response_data, dict))
-    if 'films' not in response_data:
+    status_code = request_films.status_code
+    check_request_status(status_code)
+    if status_code == HTTPStatus.NOT_FOUND:
+        return None
+
+    request_data = request_films.json()
+    validate_types(request_data=(request_data, dict))
+    if 'films' not in request_data:
         msg = 'Ключ films отсутствует в ответе API'
         raise APIAnswerWrongDataError(msg)
 
-    films: list = request_films.json()['films']
+    films = request_data['films']
     if len(films) == 0:
         msg = (f'Поиск ({title}). В ответе API список films пуст.\n'
                f'Проверьте имя файла.')
@@ -222,7 +231,8 @@ def get_film_id(title: str, year: str) -> tuple[bool, str, str]:
     return is_year_found, str(films[last_released_film_idx]['filmId']), msg
 
 
-def get_raw_film_info(film_id: str) -> dict:
+@ttl_cache(maxsize=GET_ID_CACHE_SIZE, ttl=GET_ID_TTL)
+def get_raw_film_info(film_id: str) -> dict | None:
     """Отправляет запрос к kinopoiskapiunofficial API для поиска
       информации о фильме по kinopoisk_id.
 
@@ -248,16 +258,19 @@ def get_raw_film_info(film_id: str) -> dict:
     except RequestException as e:
         message = (f'Ошибка при получении ответа от API {request_params}: {e}')
         raise APIConnectionError(message)
-    if request_film_info.status_code != HTTPStatus.OK:
-        raise APIConnectionError(
-            f'API вернул код: {request_film_info.status_code}')
+    status_code = request_film_info.status_code
+    check_request_status(status_code)
+    if status_code == HTTPStatus.NOT_FOUND:
+        return None
     raw_film_info = request_film_info.json()
 
     validate_types(raw_film_info=(raw_film_info, dict))
     return raw_film_info
 
 
-def get_raw_staff_info(film_id: str, max_actors: int = MAX_ACTORS) -> dict:
+@ttl_cache(maxsize=GET_ID_CACHE_SIZE, ttl=GET_ID_TTL)
+def get_raw_staff_info(
+        film_id: str, max_actors: int = MAX_ACTORS) -> dict | None:
     """Отправляет запрос к kinopoiskapiunofficial API для поиска
       информации об актерах и режиссерах по kinopoisk_id.
 
@@ -284,9 +297,10 @@ def get_raw_staff_info(film_id: str, max_actors: int = MAX_ACTORS) -> dict:
     except RequestException as e:
         message = (f'Ошибка при получении ответа от API {request_params}: {e}')
         raise APIConnectionError(message)
-    if request_staff_info.status_code != HTTPStatus.OK:
-        raise APIConnectionError(
-            f'API вернул код: {request_staff_info.status_code}')
+    status_code = request_staff_info.status_code
+    check_request_status(status_code)
+    if status_code == HTTPStatus.NOT_FOUND:
+        return None
 
     raw_film_staff_info = request_staff_info.json()
 

@@ -17,6 +17,8 @@ X_API_KEY = os.getenv('x_api_key')
 MAX_ACTORS = 10
 GET_ID_CACHE_SIZE = 100
 GET_ID_TTL = 60*60*24
+DAY_LIMIT = 500
+SECOND_LIMIT = 4
 FILM_INFO_STRUCTURE = {
     'title': 'nameRu',
     'originaltitle': 'nameOriginal',

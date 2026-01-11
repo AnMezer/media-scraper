@@ -22,3 +22,15 @@ class APIAnswerWrongDataError(Exception):
 
 class NoFilmsError(Exception):
     """В ответе API список films пуст"""
+
+
+class UnauthorisedError(Exception):
+    """Пустой или неправильный токен"""
+
+
+class RequestLimitExceededError(Exception):
+    """Превышен дневной или общий лимит на запросы к API"""
+
+
+class TooManyRequestsError(Exception):
+    """Превышен сукундный лимит на запросы к API"""
