@@ -5,6 +5,7 @@ import time
 from http import HTTPStatus
 from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
+from cachetools.func import ttl_cache
 
 import requests
 from requests.exceptions import RequestException
@@ -23,6 +24,8 @@ from config.settings import (
     VIDEO_EXT,
     X_API_KEY,
     YEAR_STAMP,
+    GET_ID_CACHE_SIZE,
+    GET_ID_TTL
 )
 
 from .exceptions import (
@@ -145,6 +148,7 @@ def is_nfo_file_exists(video_file_name: str, files: list) -> bool:
     return False
 
 
+@ttl_cache(maxsize=GET_ID_CACHE_SIZE, ttl=GET_ID_TTL)
 def get_film_id(title: str, year: str) -> tuple[bool, str, str]:
     """Отправляет запрос к kinopoiskapiunofficial API для поиска
       kinopoisk_id фильма.
