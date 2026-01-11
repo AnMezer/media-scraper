@@ -1,4 +1,5 @@
 import os
+import pprint
 import re
 import time
 from http import HTTPStatus
@@ -27,7 +28,6 @@ from config.settings import (
 from .exceptions import (
     APIAnswerWrongDataError,
     APIConnectionError,
-    DefaultError,
     MissingVariableError,
     NoFilmsError,
     NoYearError,
@@ -71,13 +71,12 @@ def check_vars():
     missing_vars = []
     for file_name, vars_dict in variables.items():
         for var_name, var_value in vars_dict.items():
-            if var_value is None or (isinstance(var_value, str) and var_value.strip() == ''):
+            if (var_value is None or
+                    (isinstance(var_value, str) and var_value.strip() == '')):
                 missing_vars.append(f'{file_name}: {var_name}')
     if missing_vars:
-        error_message = (
-            f'В переменных окружения не определены: '
-            f'{', '.join(missing_vars)}'
-        )
+        error_message = (f'В переменных окружения не определены: '
+                         f'{', '.join(missing_vars)}')
         logger.critical(error_message)
         raise MissingVariableError(error_message)
 
@@ -123,7 +122,8 @@ def get_film_name_year(raw_file_name: str) -> tuple[str, str]:
         title = re.sub(r'\s+', ' ', title).strip()
         return title, year
     raise NoYearError(
-        f'У файла {raw_file_name} отсутствует год выпуска в названии')
+        f'У файла {raw_file_name} год выпуска не найден.\n'
+        f'Проверьте имя файла.')
 
 
 def is_nfo_file_exists(video_file_name: str, files: list) -> bool:
@@ -193,7 +193,8 @@ def get_film_id(title: str, year: str) -> tuple[bool, str, str]:
 
     films: list = request_films.json()['films']
     if len(films) == 0:
-        msg = 'В ответе API список films пуст'
+        msg = (f'Поиск ({title}). В ответе API список films пуст.\n'
+               f'Проверьте имя файла.')
         raise NoFilmsError(msg)
 
     for idx, film in enumerate(films):
@@ -249,8 +250,6 @@ def get_raw_film_info(film_id: str) -> dict:
     raw_film_info = request_film_info.json()
 
     validate_types(raw_film_info=(raw_film_info, dict))
-
-    cover_url = raw_film_info.get('coverUrl') or None
     return raw_film_info
 
 
@@ -412,7 +411,8 @@ def create_nfo(clean_film_info: dict, clean_staff_info: dict,
                         SubElement(root, 'genre').text = str(genre['genre'])
                 elif tag == 'countries':
                     for country in tag_value:
-                        SubElement(root, 'country').text = str(country['country'])
+                        SubElement(root, 'country').text = str(
+                            country['country'])
                 else:
                     SubElement(root, tag).text = str(tag_value)
         for profession, persons in clean_staff_info.items():
@@ -492,8 +492,8 @@ def process_folder(root: str, files: list):
                 raw_staff_info = get_raw_staff_info(film_id, MAX_ACTORS)
                 (clean_film_info, posters_urls,
                  empty_fields) = get_clean_film_info(raw_film_info)
-                message += f'{clean_film_info['title']} '
-                f'({clean_film_info['year']}):'
+                message += (f'{clean_film_info['title']} '
+                            f'({clean_film_info['year']}):')
 
                 (clean_staff_info, staff_posters,
                  empty_posters) = get_clean_staff_info(raw_staff_info)
@@ -543,7 +543,7 @@ def main():
             else:
                 print('Новых файлов нет')
         except Exception as error:
-            error_message = f'Сбой в работе программы: {error}'
+            error_message = f'Сбой в работе программы:\n{error}'
             if error_message != latest_error_msg:
                 try:
                     send_message(bot, error_message)
