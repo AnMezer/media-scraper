@@ -3,6 +3,7 @@ import pprint
 import re
 import time
 from http import HTTPStatus
+from turtle import tilt
 from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
 from cachetools.func import ttl_cache
@@ -37,6 +38,7 @@ from .utils.exceptions import (
     MissingVariableError,
     NoFilmsError,
     NoYearError,
+    NotFoundError
 )
 from .utils.logger import setup_logger
 from .utils.validators import validate_types, check_request_status
@@ -505,16 +507,27 @@ def process_folder(root: str, files: list):
             if not is_nfo_file_exists(raw_file_name, files):
                 files_processed += 1
                 title, year = get_film_name_year(raw_file_name)
-                is_ok_film_id, film_id, msg_id = get_film_id(title, year)
-                raw_film_info = get_raw_film_info(film_id)
-                raw_staff_info = get_raw_staff_info(film_id, MAX_ACTORS)
+                result_film_id = get_film_id(title, year)
+                if result_film_id is None:
+                    raise NotFoundError(f'В API для {title} ({year}) '
+                                        f'id не найден')
+                is_ok_film_id, film_id, msg_id = result_film_id
+                result_raw_film_info = get_raw_film_info(film_id)
+                if result_raw_film_info is None:
+                    raise NotFoundError(f'В API для id {film_id}) '
+                                        f'Информация о фильме не найдена')
+                raw_film_info = result_raw_film_info
+                result_raw_staff_info = get_raw_staff_info(film_id, MAX_ACTORS)
+                if result_raw_staff_info is None:
+                    raise NotFoundError(f'В API для id {film_id}) '
+                                        f'Информация об актерах не найдена')
                 (clean_film_info, posters_urls,
                  empty_fields) = get_clean_film_info(raw_film_info)
                 message += (f'{clean_film_info['title']} '
                             f'({clean_film_info['year']}):')
 
                 (clean_staff_info, staff_posters,
-                 empty_posters) = get_clean_staff_info(raw_staff_info)
+                 empty_posters) = get_clean_staff_info(result_raw_staff_info)
 
                 is_ok, msg = create_nfo(
                     clean_film_info, clean_staff_info, root, raw_file_name)

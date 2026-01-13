@@ -34,3 +34,7 @@ class RequestLimitExceededError(Exception):
 
 class TooManyRequestsError(Exception):
     """Превышен сукундный лимит на запросы к API"""
+
+
+class NotFoundError(Exception):
+    """В API результатов не найдено"""
