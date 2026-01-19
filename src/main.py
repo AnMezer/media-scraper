@@ -3,7 +3,6 @@ import pprint
 import re
 import time
 from http import HTTPStatus
-from turtle import tilt
 from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
 from cachetools.func import ttl_cache
@@ -29,7 +28,10 @@ from config.settings import (
     GET_ID_CACHE_SIZE,
     GET_ID_TTL,
     DAY_LIMIT,
-    SECOND_LIMIT
+    SECOND_LIMIT,
+    MOVIES_FOLDER,
+    CARTOONS_FOLDER,
+    TV_SHOWS_FOLDER
 )
 
 from .utils.exceptions import (
@@ -564,6 +566,8 @@ def main():
         try:
             check_vars()
             for root, dirs, files in os.walk(MEDIA_ROOT_PATH):
+                if TV_SHOWS_FOLDER in dirs:
+                    dirs.remove(TV_SHOWS_FOLDER)
                 files_processed, message = process_folder(root, files)
                 if message:
                     bot_message += f'**** {message}\n\n'
@@ -581,7 +585,7 @@ def main():
                     latest_error_msg = error_message
                 except Exception:
                     logger.error('Ошибка при отправке сообщения')
-        time.sleep(120)
+        time.sleep(10)
 
 
 if __name__ == '__main__':

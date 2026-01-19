@@ -5,6 +5,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 MEDIA_ROOT_PATH = os.getenv('media_root_path')
+MOVIES_FOLDER = 'Movies'
+CARTOONS_FOLDER = 'Cartoons'
+TV_SHOWS_FOLDER = 'Serials'
 TELEGRAM_BOT_TOKEN = os.getenv('telegram_bot_token')
 TELEGRAM_CHAT_ID = os.getenv('telegram_chat_id')
 YEAR_STAMP = r'(19|20)\d{2}'
@@ -29,6 +32,22 @@ FILM_INFO_STRUCTURE = {
     'votes': 'ratingKinopoiskVoteCount',
     'mpaa': 'ratingMpaa',
     'certification': 'ratingMpaa',
+    'genres': 'genres',
+    'countries': 'countries',
+    'kinopoisk_id': 'kinopoiskId',
+    'poster': 'posterUrl',
+    'fanart': 'coverUrl'
+}
+TV_SHOW_INFO_STRUCTURE = {
+    'title': 'nameRu',
+    'originaltitle': 'nameOriginal',
+    'year': 'year',
+    'plot': 'description',
+    'rating': 'rating',
+    'votes': 'ratingKinopoiskVoteCount',
+    'mpaa': 'ratingMpaa',
+    'ststus': 'productionStatus',
+    # 'certification': 'ratingMpaa',
     'genres': 'genres',
     'countries': 'countries',
     'kinopoisk_id': 'kinopoiskId',
