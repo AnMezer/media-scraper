@@ -113,31 +113,36 @@ def send_message(bot: TeleBot, message: str) -> bool:
     return True
 
 
-def get_film_name_year(raw_file_name: str) -> tuple[str, str]:
+def get_film_name_year(
+        raw_file_name: str, is_tv_show: bool = False) -> tuple[str, str | None]:
     """Возвращает название и год выпуска из имени файла.
 
     Args:
         raw_file_name: Имя файла без расширения.
-
+        need_year: Флаг нужен ли год (для сериалов год не применяется)
     Raises:
         ValueError: На вход получен тип данных не str.
         NoYearError: Год выпуска в имени файла не найден.
 
     Returns:
-        Кортеж - (title, year)
+        Кортеж - (title, year | None)
     """
     validate_types(raw_file_name=(raw_file_name, str))
-
-    match = re.search(YEAR_STAMP, raw_file_name)
-    if match:
-        year = match.group()
-        raw_title = raw_file_name[:match.start()]
-        title = re.sub(SPLITTERS, ' ', raw_title)
-        title = re.sub(r'\s+', ' ', title).strip()
-        return title, year
-    raise NoYearError(
-        f'У файла {raw_file_name} год выпуска не найден.\n'
-        f'Проверьте имя файла.')
+    if not is_tv_show:
+        match = re.search(YEAR_STAMP, raw_file_name)
+        if match:
+            year = match.group()
+            raw_title = raw_file_name[:match.start()]
+        else:
+            raise NoYearError(
+                f'У файла {raw_file_name} год выпуска не найден.\n'
+                f'Проверьте имя файла.')
+    else:
+        raw_title = raw_file_name
+        year = None
+    title = re.sub(SPLITTERS, ' ', raw_title)
+    title = re.sub(r'\s+', ' ', title).strip()
+    return title, year
 
 
 def is_nfo_file_exists(video_file_name: str, files: list) -> bool:
@@ -505,6 +510,7 @@ def process_folder(root: str, files: list):
     message = ''
     for file in files:
         raw_file_name, ext = os.path.splitext(file)
+
         if ext in VIDEO_EXT:
             if not is_nfo_file_exists(raw_file_name, files):
                 files_processed += 1
@@ -572,6 +578,9 @@ def main():
                 if message:
                     bot_message += f'**** {message}\n\n'
                 new_files += files_processed
+            # ----------------------
+ 
+            # ----------------------
             if new_files > 0:
                 bot_message += f'*!* Новых фильмов в медиатеке - {new_files}.'
                 send_message(bot, bot_message)
