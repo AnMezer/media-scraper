@@ -158,14 +158,14 @@ def is_nfo_file_exists(video_file_name: str, files: list) -> bool:
     validate_types(video_file_name=(video_file_name, str))
 
     nfo_file_name = video_file_name + '.nfo'
-    for file_name in files:
-        if file_name == nfo_file_name:
-            return True
+    if nfo_file_name in files:
+        return True
     return False
 
 
 @ttl_cache(maxsize=GET_ID_CACHE_SIZE, ttl=GET_ID_TTL)
-def get_film_id(title: str, year: str) -> tuple[bool, str, str] | None:
+def get_film_id(
+        title: str, year: str | None = None) -> tuple[bool, str, str] | None:
     """Отправляет запрос к kinopoiskapiunofficial API для поиска
       kinopoisk_id фильма.
     Ищет в ответе совпадение по году выпуска,
@@ -195,8 +195,9 @@ def get_film_id(title: str, year: str) -> tuple[bool, str, str] | None:
                       'headers': {'x-api-key': X_API_KEY},
                       'params': {'keyword': title}}
 
-    validate_types(year=(year, str), title=(title, str))
-
+    validate_types(title=(title, str))
+    if year:
+        validate_types(year=(year, str))
     try:
         request_films = requests.get(**request_params)
     except RequestException as e:
@@ -411,7 +412,7 @@ def get_clean_staff_info(raw_staff_info: dict) -> tuple[dict, dict, str]:
 
 
 def create_nfo(clean_film_info: dict, clean_staff_info: dict,
-               path: str, raw_file_name: str) -> tuple[bool, str]:
+               path: str, raw_file_name: str | None = None) -> tuple[bool, str]:
     """Создает *.nfo файл рядом с фильмом.
 
     Args:
@@ -426,8 +427,11 @@ def create_nfo(clean_film_info: dict, clean_staff_info: dict,
     try:
         validate_types(clean_film_info=(clean_film_info, dict),
                        clean_staff_info=(clean_staff_info, dict),
-                       path=(path, str),
-                       raw_file_name=(raw_file_name, str))
+                       path=(path, str))
+        if raw_file_name:
+            validate_types(raw_file_name=(raw_file_name, str))
+        else:
+            raw_file_name = 'tvshow'
 
         nfo_path = os.path.join(path, raw_file_name + '.nfo')
         root = Element('movie')
