@@ -34,6 +34,7 @@ from config.settings import (
     TV_SHOWS_FOLDER
 )
 
+
 from .utils.exceptions import (
     APIAnswerWrongDataError,
     APIConnectionError,
@@ -221,24 +222,43 @@ def get_film_id(
         raise NoFilmsError(msg)
 
     for idx, film in enumerate(films):
-        film_year: str = film['year']
-        if len(film_year) != 4 or not film_year.isdigit():
-            msg = 'В ответе формат данных года не соответствует ожидаемым'
-            raise APIAnswerWrongDataError(msg)
-        if film_year > last_release_year:
-            last_release_year = film_year
-            last_released_film_idx = idx
-        if not is_year_found:
-            if film_year == year:
-                is_year_found = True
-                msg = (f'Данные о фильме {film['nameRu']} ({year}) '
-                       f'успешно получены')
-                return is_year_found, str(films[idx]['filmId']), msg
+        if is_year_found:
+            break
+        film_year = film.get('year')
+        film_name = film.get('nameRu')
+        if film_year is None or film_name is None:
+            continue
+        if film_year == year:
+            is_year_found = True
+            msg = (f'Данные о фильме {film["nameRu"]} ({year}) '
+                   f'успешно получены')
+            return is_year_found, str(films[idx]['filmId']), msg
+        elif int(film_year) == int(year) - 1:
+            is_year_found = True
+            msg = (f'Данные о фильме {film["nameRu"]} ({year}) '
+                   f'успешно получены (год выпуска отличается на 1)')
+            return not is_year_found, str(films[idx]['filmId']), msg
+        else:
+            continue
+            if len(film_year) != 4 or not film_year.isdigit():
+                msg = f'{title} {year} В ответе формат данных года не соответствует ожидаемым {film_year}'
+                raise APIAnswerWrongDataError(msg)
+            if film_year > last_release_year:
+                last_release_year = film_year
+                last_released_film_idx = idx
+            if not is_year_found:
+                if film_year == year:
+                    is_year_found = True
+                    msg = (f'Данные о фильме {film['nameRu']} ({year}) '
+                        f'успешно получены')
+                    return is_year_found, str(films[idx]['filmId']), msg
 
-        msg = (f'Год выпуска при поиске {title} ({year}) '
-               f'не найден в ответе API, сохранены данные о фильме '
-               f'с самым свежим годом релиза.')
-    return is_year_found, str(films[last_released_film_idx]['filmId']), msg
+            msg = (f'Год выпуска при поиске {title} ({year}) '
+                f'не найден в ответе API, сохранены данные о фильме '
+                f'с самым свежим годом релиза.')
+    if not is_year_found:
+        return None
+    #return is_year_found, str(films[last_released_film_idx]['filmId']), msg
 
 
 @ttl_cache(maxsize=GET_ID_CACHE_SIZE, ttl=GET_ID_TTL)
@@ -472,8 +492,9 @@ def create_nfo(clean_film_info: dict, clean_staff_info: dict,
         return False, str(error_msg)
 
 
-def create_posters(posters_urls: dict, staff_posters: dict,
-                   root: str, raw_file_name: str) -> tuple[bool, str]:
+def create_posters(
+        posters_urls: dict, staff_posters: dict,
+        root: str, raw_file_name: str | None = None) -> tuple[bool, str]:
     """Сохраняет постеры и фото актеров.
 
     Args:
@@ -485,12 +506,15 @@ def create_posters(posters_urls: dict, staff_posters: dict,
     try:
         validate_types(posters_urls=(posters_urls, dict),
                        staff_posters=(staff_posters, dict),
-                       root=(root, str),
-                       raw_file_name=(raw_file_name, str))
-
+                       root=(root, str))
+        if raw_file_name:
+            validate_types(raw_file_name=(raw_file_name, str))
         for key, value in posters_urls.items():
             if value:
-                file_root = os.path.join(root, f'{raw_file_name}-{key}.jpg')
+                if raw_file_name is not None:
+                    file_root = os.path.join(root, f'{raw_file_name}-{key}.jpg')
+                else:
+                    file_root = os.path.join(root, f'{key}.jpg')
                 picture = requests.get(url=posters_urls[key])
                 with open(file_root, 'wb') as f:
                     f.write(picture.content)
