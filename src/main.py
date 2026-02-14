@@ -40,7 +40,7 @@ from .utils.exceptions import (
     APIAnswerWrongDataError,
     APIConnectionError,
     MissingVariableError,
-    NoFilmsError,
+    NoContentError,
     NoYearError,
     NotFoundError
 )
@@ -182,7 +182,7 @@ def get_film_id(
         APIConnectionError: Если не получен или статус отличен от 200.
         TypeError: Если тип данных ответа отличается от ожидаемого.
         APIAnswerWrongDataError: Искомый ключ в ответе отсутствует.
-        NoFilmsError: В ответе нет ни одного фильма.
+        NoContentError: В ответе нет ни одного фильма.
         APIAnswerWrongDataError: Формат года в ответе не соответствует ожидаемому.
 
     Returns:
@@ -220,7 +220,7 @@ def get_film_id(
     if len(films) == 0:
         msg = (f'Поиск ({title}). В ответе API список films пуст.\n'
                f'Проверьте имя файла.')
-        raise NoFilmsError(msg)
+        raise NoContentError(msg)
 
     for idx, film in enumerate(films):
         if is_year_found:

@@ -15,11 +15,12 @@ def setup_logger(name: str, level: int = logging.DEBUG) -> logging.Logger:
     time_format = '%Y-%m-%d %H:%M'
     logger = logging.getLogger(name)
     logger.setLevel(level)
-    handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - [%(levelname)s]: %(message)s',
-        datefmt=time_format
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    if not logger.handlers:
+        handler = logging.StreamHandler(sys.stdout)
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - [%(levelname)s]: %(message)s',
+            datefmt=time_format
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
     return logger
