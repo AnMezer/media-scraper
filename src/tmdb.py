@@ -74,7 +74,7 @@ def main():
                                                             show, 'tv_show')
                 content = get_content(
                     content_title, content_year, 'tv_show', show_path)
-                print(len(content))
+                pprint.pprint(content)
 
         except Exception as e:
             error_message = f'Сбой в работе программы:\n{e}'

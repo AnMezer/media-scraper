@@ -141,8 +141,19 @@ def get_content_by_id(id: int, content_type: str):
     return content
 
 
-def eliminate_uncertainty(uncertainty_content_ids: list, path: str):
-    """Из нескольких id сериалов определяет наиболее подходящий"""
+def eliminate_uncertainty(
+        uncertainty_content_ids: list, path: str) -> list[dict]:
+    """
+    Из нескольких id сериалов выбирает наиболее подходящий, возвращает
+    информацию о нем, если однозначно определить не удалось,
+    будет возвращена информация обо всех подходящих сериалах.
+    Args:
+        uncertainty_content_ids: Список id
+        path: Путь к папке с сериалом
+
+    Returns: Список словарей с информацией о сериалах
+
+    """
     validate_types_from_annotation()
     # Получаем информацию о кол-ве сезонов сохраненных локально
     seasons_local = [season.name for season in os.scandir(path)
@@ -198,7 +209,18 @@ def eliminate_uncertainty(uncertainty_content_ids: list, path: str):
 def get_content(
         content_title: str, content_year: str | None,
         content_type: str, path: str) -> list | None:
-    """Получение ID фильма или сериала"""
+    """
+    Возвращает информацию о фильме/сериале.
+    Args:
+        content_title: Название фильма/сериала
+        content_year: Год выпуска (только для фильмов)
+        content_type: movie или tv_show
+        path: Путь к папке с фильмом/сериалом
+
+    Returns:
+        - Список словарей с информацией о контенте
+        - None если ничего не найдено
+    """
     validate_types_from_annotation()
     if content_type == 'tv_show':
         url = TMDB_SEARCH_SHOW
