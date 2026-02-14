@@ -3,8 +3,10 @@ from inspect import stack
 import pprint
 import re
 from urllib import request
+#from xml.etree.ElementTree import Element, SubElement
+from lxml import etree
+
 import requests
-from telebot import TeleBot
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
 from requests.exceptions import RequestException
@@ -17,6 +19,7 @@ from src.main import SPLITTERS
 from src.utils.exceptions import APIAnswerWrongDataError, APIConnectionError, \
     NoContentError, NoYearError, ScraperError
 from src.utils.validators import check_request_status, validate_types, validate_types_from_annotation
+from utils.exceptions import NfoCreateError
 
 logger = logging.getLogger(f'Media scraper.{__name__}')
 
@@ -306,3 +309,49 @@ def get_clean_info(raw_info: dict):
             content_info[key] = clean_value
     return content_info, content_info
 
+def create_nfo(
+        content_info: dict, path: str, content_type: str,
+        file_name: str | None = None):
+    """
+    Создает nfo файл.
+    Args:
+        content_info: Словарь с данными для сохранения в файле.
+        path: папка для создания файла.
+        content_type: movie или tv_show.
+        file_name: имя nfo файла, только для фильмов.
+
+    Returns:
+
+    """
+    validate_types_from_annotation()
+    try:
+        if content_type == 'tv_show':
+            file_name = 'tvshow.nfo'
+            root_name = 'tvshow'
+        else:
+            file_name = f'{file_name}.nfo'
+            root_name = 'movie'
+        nfo_path = os.path.join(path, file_name)
+        root = etree.Element(root_name)
+        for tag, tag_value in content_info.items():
+            if tag == 'genres':
+                for genre in tag_value:
+                    tag = etree.SubElement(root, 'genre')
+                    tag.text = str(genre['name'])
+                    #SubElement(root, 'genre').text = str(genre['name'])
+            elif tag == 'countries':
+                for country in tag_value:
+                    tag = etree.SubElement(root, 'country')
+                    tag.text = str(country['name'])
+                    #SubElement(root, 'country').text = str(country['name'])
+            else:
+                tag = etree.SubElement(root, tag)
+                tag.text = str(tag_value)
+                #SubElement(root, tag).text = str(tag_value)
+        rough_xml = etree.tostring(root, encoding='utf-8',
+                                   xml_declaration=True, pretty_print=True)
+        final_xml = rough_xml.decode('utf-8')
+        with open(nfo_path, 'w', encoding='utf-8') as f:
+            f.write(final_xml)
+    except Exception as e:
+        raise NfoCreateError(e)
