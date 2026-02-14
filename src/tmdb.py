@@ -48,6 +48,7 @@ from src.utils.logger import setup_logger
 from src.utils.validators import validate_types, check_request_status
 from src.utils.helpers import (get_content,
                              get_content_name_year, send_message, is_nfo_file_exists)
+from utils.helpers import get_clean_info
 
 SPLITTERS = r'[_.()]'
 
@@ -72,9 +73,11 @@ def main():
             if not is_nfo_file_exists(show_path, 'tv_show', show):
                 content_title, content_year = get_content_name_year(
                                                             show, 'tv_show')
-                content = get_content(
+                contents = get_content(
                     content_title, content_year, 'tv_show', show_path)
-                pprint.pprint(content)
+                for content in contents:
+                    content_info, images = get_clean_info(content)
+
 
         except Exception as e:
             error_message = f'Сбой в работе программы:\n{e}'

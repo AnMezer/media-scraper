@@ -12,7 +12,7 @@ import logging
 import os
 
 from config.settings import TELEGRAM_CHAT_ID, TMDB_GET_SHOW, TMDB_SEARCH_SHOW, \
-    TMDB_TOKEN, YEAR_STAMP, VIDEO_EXT
+    TMDB_TOKEN, YEAR_STAMP, VIDEO_EXT, TV_SHOW_INFO_STRUCTURE, TMDB_IMAGES
 from src.main import SPLITTERS
 from src.utils.exceptions import APIAnswerWrongDataError, APIConnectionError, \
     NoContentError, NoYearError, ScraperError
@@ -203,9 +203,6 @@ def eliminate_uncertainty(
                     candidates.append(candidate)
     return candidates
 
-
-
-
 def get_content(
         content_title: str, content_year: str | None,
         content_type: str, path: str) -> list | None:
@@ -296,3 +293,16 @@ def get_content(
         candidates = eliminate_uncertainty(uncertainty_content_ids, path)
         return candidates
     raise ScraperError('Ошибка выполнения функции get_content')
+
+def get_clean_info(raw_info: dict):
+    images = {}
+    content_info = {}
+    validate_types_from_annotation()
+    for key, value in TV_SHOW_INFO_STRUCTURE.items():
+        clean_value = raw_info.get(value)
+        if value in ('poster_path', 'backdrop_path'):
+            images[key] = f'{TMDB_IMAGES}/{clean_value}'
+        else:
+            content_info[key] = clean_value
+    return content_info, content_info
+
