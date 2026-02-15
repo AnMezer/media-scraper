@@ -20,6 +20,7 @@ TMDB_SEARCH_SHOW = 'https://api.themoviedb.org/3/search/tv'
 TMDB_GET_SHOW = 'https://api.themoviedb.org/3/tv'
 TMDB_IMAGES = 'https://image.tmdb.org/t/p/w1280'
 TMDB_SHOW_CREDITS = 'https://api.themoviedb.org/3/tv/{}/credits'
+TMDB_GET_SEASON = 'https://api.themoviedb.org/3/tv/{}/season/{}'
 X_API_KEY = os.getenv('x_api_key')
 TMDB_TOKEN = os.getenv('tmdb_api_token')
 MAX_ACTORS = 10
@@ -61,14 +62,20 @@ TV_SHOW_INFO_STRUCTURE = {
 
 
 }
-SERIES_INFO_STRUCTURE = {
-    'title': 'name',
-    'showtitle': '',
-    'season': '',
-    'episode': '',
+SEASON_INFO_STRUCTURE = {
     'plot': 'overview',
-    'aired': '',
     'TMDB_id': 'id',
-
-}
+    'poster_url': 'poster_path',
+    'season_number': 'season_number',
+    'title': 'name',
+    'episodes': []
+   }
+EPISODE_INFO_STRUCTURE = {
+        'showtitle': '',
+        'season': 'season_number',
+        'episode': 'episode_number',
+        'plot': 'overview',
+        'aired': 'air_date',
+        'TMDB_id': 'id',
+    }
 # HEADERS = {'x-api-key': os.getenv('x_api_key')}

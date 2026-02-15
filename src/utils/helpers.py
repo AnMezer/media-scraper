@@ -15,7 +15,8 @@ import os
 
 from config.settings import TELEGRAM_CHAT_ID, TMDB_GET_SHOW, TMDB_SEARCH_SHOW, \
     TMDB_TOKEN, YEAR_STAMP, VIDEO_EXT, TV_SHOW_INFO_STRUCTURE, TMDB_IMAGES, \
-    TMDB_SHOW_CREDITS
+    TMDB_SHOW_CREDITS, TMDB_GET_SEASON, SEASON_INFO_STRUCTURE, \
+    EPISODE_INFO_STRUCTURE
 from src.main import SPLITTERS
 from src.utils.exceptions import APIAnswerWrongDataError, APIConnectionError, \
     NoContentError, NoYearError, ScraperError
@@ -232,7 +233,6 @@ def get_content(
                                  'year': {content_year if content_year
                                           else None}}
                       }
-
     # Проверка статуса ответа API
     try:
         request_search = requests.get(**request_params)
@@ -335,6 +335,7 @@ def create_nfo(
 
     """
     validate_types_from_annotation()
+    keys_to_skip = ('photo_url', 'id', 'seasons')
     try:
         if content_type == 'tv_show':
             file_name = 'tvshow.nfo'
@@ -357,7 +358,7 @@ def create_nfo(
                 for actor in tag_value:
                     actor_elem = etree.SubElement(root, 'actor')
                     for key, value in actor.items():
-                        if key not in ('photo_url', 'id'):
+                        if key not in keys_to_skip:
                             sub_tag = etree.SubElement(actor_elem, key)
                             sub_tag.text = str(value)
             else:
@@ -440,3 +441,52 @@ def get_main_cast(content_id: str, content_type: str):
         else:
             continue
     return cast
+
+def get_season_info(season_num, id,):
+    """
+    Возвращает словарь с информацией о сезоне.
+    Args:
+        season_num: Номер сезона
+        id: id сериала
+
+    Returns:
+        Словарь с общей информацией о сезоне и списком с информацией о сериях.
+    """
+    validate_types_from_annotation()
+    request_params = {'url': TMDB_GET_SEASON.format(id, season_num),
+                      'headers': {'Authorization': f'Bearer {TMDB_TOKEN}'},
+                      'params': {'language': 'ru-Ru'}
+                      }
+
+    # Проверка статуса ответа API
+    try:
+        request_season = requests.get(**request_params)
+    except RequestException as e:
+        error_msg = (
+            f'Ошибка при получении ответа от API {request_params}: {e}')
+        raise APIConnectionError(error_msg)
+    status_code = request_season.status_code
+    check_request_status(status_code)
+    if status_code == HTTPStatus.NOT_FOUND:
+        return None
+
+    request_data: dict = request_season.json()
+    validate_types(request_data=(request_data, dict))
+    episodes = request_data['episodes']
+    season_info = {}
+
+    for tag, tag_info in SEASON_INFO_STRUCTURE.items():
+        if tag != 'episodes':
+            season_info[tag] = request_data.get(tag_info)
+        season_info['episodes'] = []
+
+    for episode in episodes:
+        episode_info = {}
+        episode_info[episode['episode_number']] = {}
+        for tag, tag_info in EPISODE_INFO_STRUCTURE.items():
+            if tag == 'showtitle':
+                episode_info[episode['episode_number']]['showtitle'] = ''
+            else:
+                episode_info[episode['episode_number']][tag] = episode.get(tag_info)
+        season_info['episodes'].append(episode_info)
+    return season_info
