@@ -362,8 +362,13 @@ def create_nfo(
                             sub_tag = etree.SubElement(actor_elem, key)
                             sub_tag.text = str(value)
             else:
-                tag = etree.SubElement(root, tag)
-                tag.text = str(tag_value)
+                if tag not in keys_to_skip:
+                    tag = etree.SubElement(root, tag)
+                    tag.text = str(tag_value)
+        for season in content_info['seasons']:
+            season_plot = etree.SubElement(root, 'seasonplot')
+            season_plot.set('number', str(season['season_number']))
+            season_plot.text = str(season.get('overview'))
         rough_xml = etree.tostring(root, encoding='utf-8',
                                    xml_declaration=True, pretty_print=True)
         final_xml = rough_xml.decode('utf-8')

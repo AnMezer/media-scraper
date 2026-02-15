@@ -4,6 +4,7 @@ import pprint
 import re
 import time
 from http import HTTPStatus
+from logging import raiseExceptions
 from unittest import result
 from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
@@ -84,12 +85,29 @@ def main():
 
                     for person in main_cast:
                         photo_path = os.path.join(show_path, '.actors')
-                        #create_images({person['name']: person['photo_url']},
-                        #              photo_path)
+                        create_images({person['name'].replace(' ', '_'): person['photo_url']}, photo_path)
                         content_info['actors'].append(person)
-                    #create_nfo(content_info, show_path, 'tv_show')
 
-                    get_season_info(1, content_info['TMDB_id'])
+
+                    # Получаем информацию о кол-ве сезонов сохраненных локально
+                    seasons_folders = [season.name for season in
+                                     os.scandir(show_path)
+                                     if season.is_dir() and re.search(
+                            r'(\d{1,2})$', season.name)]
+                    # Собираем словарь {№_сезона: папка_сезона}
+                    seasons = {}
+                    for season_folder in seasons_folders:
+                        match = re.search(r'(\d{1,2})', season_folder)
+                        seeason_number = int(match.group(1)) # Нужно добавить
+                        # проверку
+                        seasons[seeason_number] = season_folder
+                    for season_number in seasons:
+                        season_info = get_season_info(
+                            season_number, content_info['TMDB_id'])
+
+                    create_nfo(content_info, show_path, 'tv_show')
+
+                    #get_season_info(1, content_info['TMDB_id'])
         except Exception as e:
             error_message = f'Сбой в работе программы:\n{e}'
             if error_message != latest_error_msg:
