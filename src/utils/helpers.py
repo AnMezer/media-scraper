@@ -220,7 +220,7 @@ def get_content(
         path: Путь к папке с фильмом/сериалом
 
     Returns:
-        - Список словарей с информацией о контенте
+        - Словарь с информацией о контенте
         - None если ничего не найдено
     """
     validate_types_from_annotation()
@@ -230,8 +230,8 @@ def get_content(
                       'headers': {'Authorization': f'Bearer {TMDB_TOKEN}'},
                       'params': {'query': content_title,
                                  'language': 'ru-Ru',
-                                 'year': {content_year if content_year
-                                          else None}}
+                                 'year': content_year if content_year
+                                          else None}
                       }
     # Проверка статуса ответа API
     try:
@@ -258,7 +258,6 @@ def get_content(
         return None
     if len(results) == 0:
         raise NoContentError()
-
     # Если кандидат один, берем его id
     if len(results) == 1:
 
@@ -294,6 +293,7 @@ def get_content(
             uncertainty_content_ids.append(content_id)
 
         # Отфильтровываем лишних и получаем инфо об оставшихся
+
         candidates = eliminate_uncertainty(uncertainty_content_ids, path)
 
         if len(candidates) > 1:
@@ -304,8 +304,9 @@ def get_content(
                          f'произведение. Кандидаты:\n '
                          f'{'\n'.join(problem_items)}')
             raise ALotOfContentError(error_msg)
-
-        return candidates[0]
+        else:
+            pprint.pprint(candidates)
+            return candidates[0]
     raise ScraperError('Ошибка выполнения функции get_content')
 
 def get_clean_info(raw_info: dict):

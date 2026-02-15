@@ -78,7 +78,6 @@ def main():
                                                             show, 'tv_show')
                 content = get_content(
                     content_title, content_year, 'tv_show', show_path)
-                content = content[0]
                 content_info, images = get_clean_info(content)
                 create_images(images, show_path)
                 main_cast = get_main_cast(
@@ -86,9 +85,9 @@ def main():
 
                 for person in main_cast:
                     photo_path = os.path.join(show_path, '.actors')
-                    #create_images({person['name'].replace(' ',
-                    #                                       '_'): person[
-                    #                                       'photo_url']}, photo_path)
+                    create_images({person['name'].replace(' ',
+                                                           '_'): person[
+                                                           'photo_url']}, photo_path)
                     content_info['actors'].append(person)
 
 
@@ -128,15 +127,12 @@ def main():
                                                    ep_number],
                                                season_path, 'episode',
                                                episode_name)
-                                    pprint.pprint(content_info)
 
 
 
-                        #seasons[season_number] = season_info
 
-                    #create_nfo(content_info, show_path, 'tv_show')
+                    create_nfo(content_info, show_path, 'tv_show')
 
-                    #get_season_info(1, content_info['TMDB_id'])
         except Exception as e:
             error_message = f'Сбой в работе программы:\n{e}'
             if error_message != latest_error_msg:
