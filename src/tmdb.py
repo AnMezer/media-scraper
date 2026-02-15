@@ -48,7 +48,8 @@ from src.utils.logger import setup_logger
 from src.utils.validators import validate_types, check_request_status
 from src.utils.helpers import (get_content,
                              get_content_name_year, send_message, is_nfo_file_exists)
-from utils.helpers import get_clean_info, create_nfo
+from utils.helpers import get_clean_info, create_nfo, create_images, \
+    get_main_cast
 
 SPLITTERS = r'[_.()]'
 
@@ -77,8 +78,16 @@ def main():
                     content_title, content_year, 'tv_show', show_path)
                 for content in contents:
                     content_info, images = get_clean_info(content)
+                    #create_nfo(content_info, show_path, 'tv_show')
+                    #create_images(images, show_path)
+                    main_cast = get_main_cast(
+                        str(content_info['TMDB_id']), 'tv_show')
+                    for person in main_cast:
+                        photo_path = os.path.join(show_path, '.actors')
+                        create_images({person['name']: person['photo_url']},
+                                      photo_path)
+                        content_info['actors'].append(person)
                     create_nfo(content_info, show_path, 'tv_show')
-
         except Exception as e:
             error_message = f'Сбой в работе программы:\n{e}'
             if error_message != latest_error_msg:

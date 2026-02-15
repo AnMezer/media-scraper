@@ -19,6 +19,7 @@ ENDPOINT_STAFF_BY_FILM_ID = 'https://kinopoiskapiunofficial.tech/api/v1/staff'
 TMDB_SEARCH_SHOW = 'https://api.themoviedb.org/3/search/tv'
 TMDB_GET_SHOW = 'https://api.themoviedb.org/3/tv'
 TMDB_IMAGES = 'https://image.tmdb.org/t/p/w1280'
+TMDB_SHOW_CREDITS = 'https://api.themoviedb.org/3/tv/{}/credits'
 X_API_KEY = os.getenv('x_api_key')
 TMDB_TOKEN = os.getenv('tmdb_api_token')
 MAX_ACTORS = 10
@@ -56,7 +57,18 @@ TV_SHOW_INFO_STRUCTURE = {
     'tagline': 'tagline',
     'poster': 'poster_path',
     'fanart': 'backdrop_path',
+    'seasons': 'seasons'
 
+
+}
+SERIES_INFO_STRUCTURE = {
+    'title': 'name',
+    'showtitle': '',
+    'season': '',
+    'episode': '',
+    'plot': 'overview',
+    'aired': '',
+    'TMDB_id': 'id',
 
 }
 # HEADERS = {'x-api-key': os.getenv('x_api_key')}
