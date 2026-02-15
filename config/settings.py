@@ -68,10 +68,11 @@ SEASON_INFO_STRUCTURE = {
     'poster_url': 'poster_path',
     'season_number': 'season_number',
     'title': 'name',
-    'episodes': []
+    'episodes': {}
    }
 EPISODE_INFO_STRUCTURE = {
         'showtitle': '',
+        'title': 'name',
         'season': 'season_number',
         'episode': 'episode_number',
         'plot': 'overview',

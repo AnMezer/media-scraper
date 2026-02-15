@@ -85,7 +85,9 @@ def main():
 
                     for person in main_cast:
                         photo_path = os.path.join(show_path, '.actors')
-                        create_images({person['name'].replace(' ', '_'): person['photo_url']}, photo_path)
+                        #create_images({person['name'].replace(' ',
+                        #                                       '_'): person[
+                        #                                       'photo_url']}, photo_path)
                         content_info['actors'].append(person)
 
 
@@ -94,18 +96,46 @@ def main():
                                      os.scandir(show_path)
                                      if season.is_dir() and re.search(
                             r'(\d{1,2})$', season.name)]
+
                     # Собираем словарь {№_сезона: папка_сезона}
                     seasons = {}
                     for season_folder in seasons_folders:
                         match = re.search(r'(\d{1,2})', season_folder)
-                        seeason_number = int(match.group(1)) # Нужно добавить
-                        # проверку
+                        seeason_number = int(match.group(1)) # Нужно добавить проверку
                         seasons[seeason_number] = season_folder
+                    # Собираем информацию о сезоне
                     for season_number in seasons:
                         season_info = get_season_info(
-                            season_number, content_info['TMDB_id'])
+                            season_number, content_info['TMDB_id'],
+                            content_info['title'])
+                        season_path = os.path.join(
+                            show_path, seasons[season_number])
+                        season_files = [file.name for file in os.scandir(
+                                season_path) if file.is_file()]
+                        for file in season_files:
+                            episode_name, ext = os.path.splitext(file)
+                            if ext in VIDEO_EXT:
+                                match = re.search(r'S(\d{1,2})E(\d{1,'
+                                                  r'2})', episode_name)
+                                if match:
+                                    if not is_nfo_file_exists(season_path,
+                                                        'episode',
+                                                              episode_name):
+                                        ep_data = match.group(2)
+                                        ep_number = int(re.search(r'(\d{1,'
+                                                              r'2})?', ep_data
+                                                                  ).group(1))
+                                        create_nfo(season_info['episodes'][
+                                                       ep_number],
+                                                   season_path, 'episode', episode_name)
 
-                    create_nfo(content_info, show_path, 'tv_show')
+
+
+
+                        #seasons[season_number] = season_info
+
+                    pprint.pprint(seasons)
+                    #create_nfo(content_info, show_path, 'tv_show')
 
                     #get_season_info(1, content_info['TMDB_id'])
         except Exception as e:

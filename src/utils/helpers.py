@@ -50,7 +50,7 @@ def is_nfo_file_exists(
 
     Args:
         path: Путь к папке с nfo файлом
-        content_type: Тип контента(tv_show или movie)
+        content_type: Тип контента(tv_show, episode или movie)
         content_name: Название контента,
             - для сериалов имя корневой папки сериала.
             - для фильмов имя фидеофайла без расширения
@@ -328,8 +328,8 @@ def create_nfo(
     Args:
         content_info: Словарь с данными для сохранения в файле.
         path: папка для создания файла.
-        content_type: movie или tv_show.
-        file_name: имя nfo файла, только для фильмов.
+        content_type: movie или tv_show, episode.
+        file_name: имя nfo файла, только для фильмов и эпизодов.
 
     Returns:
 
@@ -340,6 +340,9 @@ def create_nfo(
         if content_type == 'tv_show':
             file_name = 'tvshow.nfo'
             root_name = 'tvshow'
+        elif content_type == 'episode':
+            file_name = f'{file_name}.nfo'
+            root_name = 'episodedetails'
         else:
             file_name = f'{file_name}.nfo'
             root_name = 'movie'
@@ -365,10 +368,11 @@ def create_nfo(
                 if tag not in keys_to_skip:
                     tag = etree.SubElement(root, tag)
                     tag.text = str(tag_value)
-        for season in content_info['seasons']:
-            season_plot = etree.SubElement(root, 'seasonplot')
-            season_plot.set('number', str(season['season_number']))
-            season_plot.text = str(season.get('overview'))
+        if content_type == 'tv_show' and 'seasons' in content_info:
+            for season in content_info['seasons']:
+                season_plot = etree.SubElement(root, 'seasonplot')
+                season_plot.set('number', str(season['season_number']))
+                season_plot.text = str(season.get('overview'))
         rough_xml = etree.tostring(root, encoding='utf-8',
                                    xml_declaration=True, pretty_print=True)
         final_xml = rough_xml.decode('utf-8')
@@ -447,13 +451,13 @@ def get_main_cast(content_id: str, content_type: str):
             continue
     return cast
 
-def get_season_info(season_num, id,):
+def get_season_info(season_num, id, showtitle):
     """
     Возвращает словарь с информацией о сезоне.
     Args:
         season_num: Номер сезона
         id: id сериала
-
+        showtitle: Название сериала
     Returns:
         Словарь с общей информацией о сезоне и списком с информацией о сериях.
     """
@@ -483,15 +487,13 @@ def get_season_info(season_num, id,):
     for tag, tag_info in SEASON_INFO_STRUCTURE.items():
         if tag != 'episodes':
             season_info[tag] = request_data.get(tag_info)
-        season_info['episodes'] = []
-
+    season_info['episodes'] = {}
     for episode in episodes:
-        episode_info = {}
-        episode_info[episode['episode_number']] = {}
+        episode_info = {episode['episode_number']: {}}
         for tag, tag_info in EPISODE_INFO_STRUCTURE.items():
             if tag == 'showtitle':
-                episode_info[episode['episode_number']]['showtitle'] = ''
+                episode_info[episode['episode_number']]['showtitle'] = showtitle
             else:
                 episode_info[episode['episode_number']][tag] = episode.get(tag_info)
-        season_info['episodes'].append(episode_info)
+        season_info['episodes'][episode['episode_number']] = episode_info[episode['episode_number']]
     return season_info
