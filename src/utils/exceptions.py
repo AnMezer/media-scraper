@@ -48,13 +48,18 @@ class UnprocessableEntityError(ScraperError):
 class APIAnswerWrongDataError(ScraperError):
     """Ответ API отличается от ожидаемого"""
 
+class NfoCreateError(ScraperError):
+    def __str__(self):
+        return 'Ошибка при создании nfo файла'
+
 
 class NoContentError(ScraperError):
     def __str__(self) -> str:
         return 'Ответ API пуст'
 
 
-
+class ALotOfContentError(ScraperError):
+    """Не удалось однозначно идентифицировать произведение"""
 
     
 

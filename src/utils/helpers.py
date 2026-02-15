@@ -3,8 +3,10 @@ from inspect import stack
 import pprint
 import re
 from urllib import request
+#from xml.etree.ElementTree import Element, SubElement
+from lxml import etree
+
 import requests
-from telebot import TeleBot
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
 from requests.exceptions import RequestException
@@ -12,11 +14,14 @@ import logging
 import os
 
 from config.settings import TELEGRAM_CHAT_ID, TMDB_GET_SHOW, TMDB_SEARCH_SHOW, \
-    TMDB_TOKEN, YEAR_STAMP, VIDEO_EXT
+    TMDB_TOKEN, YEAR_STAMP, VIDEO_EXT, TV_SHOW_INFO_STRUCTURE, TMDB_IMAGES, \
+    TMDB_SHOW_CREDITS, TMDB_GET_SEASON, SEASON_INFO_STRUCTURE, \
+    EPISODE_INFO_STRUCTURE
 from src.main import SPLITTERS
 from src.utils.exceptions import APIAnswerWrongDataError, APIConnectionError, \
-    NoContentError, NoYearError, ScraperError
+    NoContentError, NoYearError, ScraperError, ALotOfContentError
 from src.utils.validators import check_request_status, validate_types, validate_types_from_annotation
+from utils.exceptions import NfoCreateError
 
 logger = logging.getLogger(f'Media scraper.{__name__}')
 
@@ -45,7 +50,7 @@ def is_nfo_file_exists(
 
     Args:
         path: Путь к папке с nfo файлом
-        content_type: Тип контента(tv_show или movie)
+        content_type: Тип контента(tv_show, episode или movie)
         content_name: Название контента,
             - для сериалов имя корневой папки сериала.
             - для фильмов имя фидеофайла без расширения
@@ -203,12 +208,9 @@ def eliminate_uncertainty(
                     candidates.append(candidate)
     return candidates
 
-
-
-
 def get_content(
         content_title: str, content_year: str | None,
-        content_type: str, path: str) -> list | None:
+        content_type: str, path: str) -> dict | None:
     """
     Возвращает информацию о фильме/сериале.
     Args:
@@ -231,7 +233,6 @@ def get_content(
                                  'year': {content_year if content_year
                                           else None}}
                       }
-
     # Проверка статуса ответа API
     try:
         request_search = requests.get(**request_params)
@@ -277,7 +278,7 @@ def get_content(
         content = get_content_by_id(results[0]['id'], content_type)
         if content is None:
             return None
-        return [content,]
+        return content
 
     # Если кандидатов несколько, получаем список с их id
     if len(results) > 1:
@@ -294,5 +295,215 @@ def get_content(
 
         # Отфильтровываем лишних и получаем инфо об оставшихся
         candidates = eliminate_uncertainty(uncertainty_content_ids, path)
-        return candidates
+
+        if len(candidates) > 1:
+            problem_items = [f'{item["title"]}: {item["TMDB_id"]}' for item in
+                             candidates]
+            error_msg = (f'Для {content_title} проверьте имя '
+                         f'файла/папки. Не удалось идентифицировать '
+                         f'произведение. Кандидаты:\n '
+                         f'{'\n'.join(problem_items)}')
+            raise ALotOfContentError(error_msg)
+
+        return candidates[0]
     raise ScraperError('Ошибка выполнения функции get_content')
+
+def get_clean_info(raw_info: dict):
+    """
+    Разделяет исходную информацию на два словаря: данные и изображения
+    Args:
+        raw_info: Словарь с сырыми данными
+
+    Returns:
+        content_info - данные для сохранения в nfo файл
+        images - ссылки на изображения
+    """
+    images = {}
+    content_info = {}
+    validate_types_from_annotation()
+    for key, value in TV_SHOW_INFO_STRUCTURE.items():
+        clean_value = raw_info.get(value)
+        if value in ('poster_path', 'backdrop_path'):
+            images[key] = f'{TMDB_IMAGES}/{clean_value}'
+        else:
+            content_info[key] = clean_value
+    content_info['actors'] = []
+    return content_info, images
+
+def create_nfo(
+        content_info: dict, path: str, content_type: str,
+        file_name: str | None = None):
+    """
+    Создает nfo файл.
+    Args:
+        content_info: Словарь с данными для сохранения в файле.
+        path: папка для создания файла.
+        content_type: movie или tv_show, episode.
+        file_name: имя nfo файла, только для фильмов и эпизодов.
+
+    Returns:
+
+    """
+    validate_types_from_annotation()
+    keys_to_skip = ('photo_url', 'id', 'seasons')
+    try:
+        if content_type == 'tv_show':
+            file_name = 'tvshow.nfo'
+            root_name = 'tvshow'
+        elif content_type == 'episode':
+            file_name = f'{file_name}.nfo'
+            root_name = 'episodedetails'
+        else:
+            file_name = f'{file_name}.nfo'
+            root_name = 'movie'
+        nfo_path = os.path.join(path, file_name)
+        root = etree.Element(root_name)
+        for tag, tag_value in content_info.items():
+            if tag == 'genres':
+                for genre in tag_value:
+                    tag = etree.SubElement(root, 'genre')
+                    tag.text = str(genre['name'])
+            elif tag == 'countries':
+                for country in tag_value:
+                    tag = etree.SubElement(root, 'country')
+                    tag.text = str(country['name'])
+            elif tag == 'actors':
+                for actor in tag_value:
+                    actor_elem = etree.SubElement(root, 'actor')
+                    for key, value in actor.items():
+                        if key not in keys_to_skip:
+                            sub_tag = etree.SubElement(actor_elem, key)
+                            sub_tag.text = str(value)
+            else:
+                if tag not in keys_to_skip:
+                    tag = etree.SubElement(root, tag)
+                    tag.text = str(tag_value)
+        if content_type == 'tv_show' and 'seasons' in content_info:
+            for season in content_info['seasons']:
+                season_plot = etree.SubElement(root, 'seasonplot')
+                season_plot.set('number', str(season['season_number']))
+                season_plot.text = str(season.get('overview'))
+        rough_xml = etree.tostring(root, encoding='utf-8',
+                                   xml_declaration=True, pretty_print=True)
+        final_xml = rough_xml.decode('utf-8')
+        with open(nfo_path, 'w', encoding='utf-8') as f:
+            f.write(final_xml)
+    except Exception as e:
+        raise NfoCreateError(e)
+
+def create_images(images: dict, path):
+    """
+    Загружает и создает изображения.
+    Args:
+        images: Словарь {название файла: ссылка}
+        path: Адрес папки для сохранения
+
+    Returns:
+
+    """
+    validate_types_from_annotation()
+    os.makedirs(path, exist_ok=True)
+    for image_type, url in images.items():
+        image = requests.get(url=url)
+        file_name = f'{image_type}.jpg'
+        file_path = os.path.join(path, file_name)
+        with open(file_path, 'wb') as f:
+            f.write(image.content)
+
+def get_main_cast(content_id: str, content_type: str):
+    """
+    Возвращает информацию о главных актерах
+    Args:
+        content_id: id фильма/сериала
+        content_type: movie или tv_show
+
+    Returns:
+        Список словарей с информацией об актерах.
+    """
+    validate_types_from_annotation()
+    if content_type == 'tv_show':
+        url = TMDB_SHOW_CREDITS.format(content_id)
+    request_params = {'url': url,
+                      'headers': {'Authorization': f'Bearer {TMDB_TOKEN}'},
+                      'params': {
+                                 'language': 'ru-Ru',}}
+
+    # Проверка статуса ответа API
+    try:
+        request_cast = requests.get(**request_params)
+    except RequestException as e:
+        error_msg = (
+            f'Ошибка при получении ответа от API {request_params}: {e}')
+        raise APIConnectionError(error_msg)
+    status_code = request_cast.status_code
+    check_request_status(status_code)
+    if status_code == HTTPStatus.NOT_FOUND:
+        return None
+
+    request_data: dict = request_cast.json()
+    cast = []
+    for person in request_data['cast']:
+        person_info = {}
+        person_info['name'] = person.get('name')
+        person_info['role'] = person.get('character')
+        person_info['order'] = person.get('order')
+        person_info['id'] = person.get('id')
+        raw_url = person.get('profile_path')
+        if raw_url is not None:
+            person_info['photo_url'] = f'{TMDB_IMAGES}{raw_url}'
+        full_info = True
+        for tag in person_info:
+            if tag is None:
+                full_info = False
+        if full_info:
+            cast.append(person_info)
+        else:
+            continue
+    return cast
+
+def get_season_info(season_num, id, showtitle):
+    """
+    Возвращает словарь с информацией о сезоне.
+    Args:
+        season_num: Номер сезона
+        id: id сериала
+        showtitle: Название сериала
+    Returns:
+        Словарь с общей информацией о сезоне и списком с информацией о сериях.
+    """
+    validate_types_from_annotation()
+    request_params = {'url': TMDB_GET_SEASON.format(id, season_num),
+                      'headers': {'Authorization': f'Bearer {TMDB_TOKEN}'},
+                      'params': {'language': 'ru-Ru'}
+                      }
+
+    # Проверка статуса ответа API
+    try:
+        request_season = requests.get(**request_params)
+    except RequestException as e:
+        error_msg = (
+            f'Ошибка при получении ответа от API {request_params}: {e}')
+        raise APIConnectionError(error_msg)
+    status_code = request_season.status_code
+    check_request_status(status_code)
+    if status_code == HTTPStatus.NOT_FOUND:
+        return None
+
+    request_data: dict = request_season.json()
+    validate_types(request_data=(request_data, dict))
+    episodes = request_data['episodes']
+    season_info = {}
+
+    for tag, tag_info in SEASON_INFO_STRUCTURE.items():
+        if tag != 'episodes':
+            season_info[tag] = request_data.get(tag_info)
+    season_info['episodes'] = {}
+    for episode in episodes:
+        episode_info = {episode['episode_number']: {}}
+        for tag, tag_info in EPISODE_INFO_STRUCTURE.items():
+            if tag == 'showtitle':
+                episode_info[episode['episode_number']]['showtitle'] = showtitle
+            else:
+                episode_info[episode['episode_number']][tag] = episode.get(tag_info)
+        season_info['episodes'][episode['episode_number']] = episode_info[episode['episode_number']]
+    return season_info

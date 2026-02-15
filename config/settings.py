@@ -18,6 +18,9 @@ ENDPOINT_DATA_BY_FILM_ID = 'https://kinopoiskapiunofficial.tech/api/v2.2/films'
 ENDPOINT_STAFF_BY_FILM_ID = 'https://kinopoiskapiunofficial.tech/api/v1/staff'
 TMDB_SEARCH_SHOW = 'https://api.themoviedb.org/3/search/tv'
 TMDB_GET_SHOW = 'https://api.themoviedb.org/3/tv'
+TMDB_IMAGES = 'https://image.tmdb.org/t/p/w1280'
+TMDB_SHOW_CREDITS = 'https://api.themoviedb.org/3/tv/{}/credits'
+TMDB_GET_SEASON = 'https://api.themoviedb.org/3/tv/{}/season/{}'
 X_API_KEY = os.getenv('x_api_key')
 TMDB_TOKEN = os.getenv('tmdb_api_token')
 MAX_ACTORS = 10
@@ -42,19 +45,38 @@ FILM_INFO_STRUCTURE = {
     'fanart': 'coverUrl'
 }
 TV_SHOW_INFO_STRUCTURE = {
-    'title': 'nameRu',
-    'originaltitle': 'nameOriginal',
-    'year': 'year',
-    'plot': 'description',
-    'rating': 'rating',
-    'votes': 'ratingKinopoiskVoteCount',
-    'mpaa': 'ratingMpaa',
-    'ststus': 'productionStatus',
-    # 'certification': 'ratingMpaa',
+    'title': 'name',
+    'originaltitle': 'original_name',
+    'premiered': 'first_air_date',
+    'plot': 'overview',
+    'rating': 'vote_average',
+    'votes': 'vote_count',
+    'status': 'status',
     'genres': 'genres',
-    'countries': 'countries',
-    'kinopoisk_id': 'kinopoiskId',
-    'poster': 'posterUrl',
-    'fanart': 'coverUrl'
+    'countries': 'production_countries',
+    'TMDB_id': 'id',
+    'tagline': 'tagline',
+    'poster': 'poster_path',
+    'fanart': 'backdrop_path',
+    'seasons': 'seasons'
+
+
 }
+SEASON_INFO_STRUCTURE = {
+    'plot': 'overview',
+    'TMDB_id': 'id',
+    'poster_url': 'poster_path',
+    'season_number': 'season_number',
+    'title': 'name',
+    'episodes': {}
+   }
+EPISODE_INFO_STRUCTURE = {
+        'showtitle': '',
+        'title': 'name',
+        'season': 'season_number',
+        'episode': 'episode_number',
+        'plot': 'overview',
+        'aired': 'air_date',
+        'TMDB_id': 'id',
+    }
 # HEADERS = {'x-api-key': os.getenv('x_api_key')}
