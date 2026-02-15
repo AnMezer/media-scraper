@@ -19,7 +19,7 @@ from config.settings import TELEGRAM_CHAT_ID, TMDB_GET_SHOW, TMDB_SEARCH_SHOW, \
     EPISODE_INFO_STRUCTURE
 from src.main import SPLITTERS
 from src.utils.exceptions import APIAnswerWrongDataError, APIConnectionError, \
-    NoContentError, NoYearError, ScraperError
+    NoContentError, NoYearError, ScraperError, ALotOfContentError
 from src.utils.validators import check_request_status, validate_types, validate_types_from_annotation
 from utils.exceptions import NfoCreateError
 
@@ -210,7 +210,7 @@ def eliminate_uncertainty(
 
 def get_content(
         content_title: str, content_year: str | None,
-        content_type: str, path: str) -> list | None:
+        content_type: str, path: str) -> dict | None:
     """
     Возвращает информацию о фильме/сериале.
     Args:
@@ -278,7 +278,7 @@ def get_content(
         content = get_content_by_id(results[0]['id'], content_type)
         if content is None:
             return None
-        return [content,]
+        return content
 
     # Если кандидатов несколько, получаем список с их id
     if len(results) > 1:
@@ -295,7 +295,17 @@ def get_content(
 
         # Отфильтровываем лишних и получаем инфо об оставшихся
         candidates = eliminate_uncertainty(uncertainty_content_ids, path)
-        return candidates
+
+        if len(candidates) > 1:
+            problem_items = [f'{item["title"]}: {item["TMDB_id"]}' for item in
+                             candidates]
+            error_msg = (f'Для {content_title} проверьте имя '
+                         f'файла/папки. Не удалось идентифицировать '
+                         f'произведение. Кандидаты:\n '
+                         f'{'\n'.join(problem_items)}')
+            raise ALotOfContentError(error_msg)
+
+        return candidates[0]
     raise ScraperError('Ошибка выполнения функции get_content')
 
 def get_clean_info(raw_info: dict):

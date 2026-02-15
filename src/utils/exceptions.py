@@ -58,7 +58,8 @@ class NoContentError(ScraperError):
         return 'Ответ API пуст'
 
 
-
+class ALotOfContentError(ScraperError):
+    """Не удалось однозначно идентифицировать произведение"""
 
     
 
