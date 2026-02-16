@@ -293,7 +293,6 @@ def get_content(
             uncertainty_content_ids.append(content_id)
 
         # Отфильтровываем лишних и получаем инфо об оставшихся
-
         candidates = eliminate_uncertainty(uncertainty_content_ids, path)
 
         if len(candidates) > 1:
@@ -305,7 +304,6 @@ def get_content(
                          f'{'\n'.join(problem_items)}')
             raise ALotOfContentError(error_msg)
         else:
-            pprint.pprint(candidates)
             return candidates[0]
     raise ScraperError('Ошибка выполнения функции get_content')
 
