@@ -16,7 +16,7 @@ import os
 from config.settings import TELEGRAM_CHAT_ID, TMDB_GET_SHOW, TMDB_SEARCH_SHOW, \
     TMDB_TOKEN, YEAR_STAMP, VIDEO_EXT, TV_SHOW_INFO_STRUCTURE, TMDB_IMAGES, \
     TMDB_SHOW_CREDITS, TMDB_GET_SEASON, SEASON_INFO_STRUCTURE, \
-    EPISODE_INFO_STRUCTURE
+    EPISODE_INFO_STRUCTURE, IMAGES_MAP, FILM_INFO_STRUCTURE
 from src.main import SPLITTERS
 from src.utils.exceptions import APIAnswerWrongDataError, APIConnectionError, \
     NoContentError, NoYearError, ScraperError, ALotOfContentError
@@ -330,7 +330,7 @@ def get_clean_info(raw_info: dict):
     return content_info, images
 
 def create_nfo(
-        content_info: dict, path: str, content_type: str,
+        content: dict, path: str, content_type: str,
         file_name: str | None = None):
     """
     Создает nfo файл.
@@ -344,51 +344,64 @@ def create_nfo(
 
     """
     validate_types_from_annotation()
-    keys_to_skip = ('photo_url', 'id', 'seasons')
+    expected_content_types = ('tv_show', 'episode', 'movie')
+    if content_type not in expected_content_types:
+        raise ValueError(f'Неподдерживаемый тип контента. '
+                         f'Ожидаются {", ".join(expected_content_types)}')
     try:
         if content_type == 'tv_show':
             file_name = 'tvshow.nfo'
             root_name = 'tvshow'
-        elif content_type == 'episode':
+            key_map = TV_SHOW_INFO_STRUCTURE
+        if content_type == 'episode':
             file_name = f'{file_name}.nfo'
             root_name = 'episodedetails'
-        else:
+            key_map = EPISODE_INFO_STRUCTURE
+        if content_type == 'movie':
             file_name = f'{file_name}.nfo'
             root_name = 'movie'
+            key_map = FILM_INFO_STRUCTURE
+
         nfo_path = os.path.join(path, file_name)
         root = etree.Element(root_name)
-        for tag, tag_value in content_info.items():
-            if tag == 'genres':
-                for genre in tag_value:
-                    tag = etree.SubElement(root, 'genre')
-                    tag.text = str(genre['name'])
-            elif tag == 'countries':
-                for country in tag_value:
-                    tag = etree.SubElement(root, 'country')
-                    tag.text = str(country['name'])
+
+        for tag, content_key in key_map.items():
+            # Обработка множественных тэгов
+            if tag in ('genres', 'countries'):
+                for elem in content[content_key]:
+                    elem_tag = etree.SubElement(root, tag)
+                    elem_tag.text = str(elem.get('name'))
+            # Обработка тэгов с вложенностью
             elif tag == 'actors':
-                for actor in tag_value:
-                    actor_elem = etree.SubElement(root, 'actor')
+                for actor in content[content_key]:
+                    tag_actor = etree.SubElement(root, 'actor')
                     for key, value in actor.items():
-                        if key not in keys_to_skip:
-                            sub_tag = etree.SubElement(actor_elem, key)
-                            sub_tag.text = str(value)
+                        if key not in IMAGES_MAP:
+                            actor_elem = etree.SubElement(tag_actor, key)
+                            actor_elem.text = str(value)
+            # Обработка инфо о сезонах
+            elif tag == 'seasons':
+                for season in content[content_key]:
+                    season_plot = etree.SubElement(root, 'seasonplot')
+                    season_plot.set('number', str(season.get('season_number')))
+                    season_plot.text = str(season.get('overview'))
+
+            # Обработка остальных тэгов, пропускаем изображения
             else:
-                if tag not in keys_to_skip:
-                    tag = etree.SubElement(root, tag)
-                    tag.text = str(tag_value)
-        if content_type == 'tv_show' and 'seasons' in content_info:
-            for season in content_info['seasons']:
-                season_plot = etree.SubElement(root, 'seasonplot')
-                season_plot.set('number', str(season['season_number']))
-                season_plot.text = str(season.get('overview'))
+                if tag not in IMAGES_MAP:
+                    elem = etree.SubElement(root, tag)
+                    elem.text = str(content[content_key])
+
         rough_xml = etree.tostring(root, encoding='utf-8',
                                    xml_declaration=True, pretty_print=True)
         final_xml = rough_xml.decode('utf-8')
         with open(nfo_path, 'w', encoding='utf-8') as f:
             f.write(final_xml)
+
     except Exception as e:
-        raise NfoCreateError(e)
+        error_msg = (f'Ошибка при создании nfo для: {content_type} в {path}:'
+                     f'{type(e).__name__} - {str(e)}')
+        raise NfoCreateError(error_msg) from e
 
 def create_images(images: dict, path):
     """
@@ -403,6 +416,7 @@ def create_images(images: dict, path):
     validate_types_from_annotation()
     os.makedirs(path, exist_ok=True)
     for image_type, url in images.items():
+        url = f'{TMDB_IMAGES}{url}'
         image = requests.get(url=url)
         file_name = f'{image_type}.jpg'
         file_path = os.path.join(path, file_name)

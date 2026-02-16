@@ -56,8 +56,6 @@ TV_SHOW_INFO_STRUCTURE = {
     'countries': 'production_countries',
     'TMDB_id': 'id',
     'tagline': 'tagline',
-    'poster': 'poster_path',
-    'fanart': 'backdrop_path',
     'seasons': 'seasons'
 
 
@@ -79,4 +77,7 @@ EPISODE_INFO_STRUCTURE = {
         'aired': 'air_date',
         'TMDB_id': 'id',
     }
+IMAGES_MAP = {'poster_path': 'poster',
+              'backdrop_path': 'fanart',
+              'profile_path': 'photo'}
 # HEADERS = {'x-api-key': os.getenv('x_api_key')}

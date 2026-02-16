@@ -34,7 +34,7 @@ from config.settings import (
     SECOND_LIMIT,
     MOVIES_FOLDER,
     CARTOONS_FOLDER,
-    TV_SHOWS_FOLDER, TMDB_IMAGES
+    TV_SHOWS_FOLDER, TMDB_IMAGES, IMAGES_MAP
 )
 from src.main import is_nfo_file_exists
 from src.utils.exceptions import (
@@ -72,23 +72,39 @@ def main():
                         if tv_show.is_dir]
             for show in tv_shows:
                 show_path = os.path.join(tv_shows_path, show)
+
                 # Если nfo-файла нет, создаем его.
                 if not is_nfo_file_exists(show_path, 'tv_show', show):
                     content_title, content_year = get_content_name_year(
                                                                 show, 'tv_show')
                     content = get_content(
                         content_title, content_year, 'tv_show', show_path)
-                    content_info, images = get_clean_info(content)
-                    create_images(images, show_path)
+
+                    # Добавляем список актеров
+                    main_cast = get_main_cast(str(content['id']), 'tv_show')
+                    content['actors'] = []
+                    for person in main_cast:
+                        content['actors'].append(person)
+                    create_nfo(content, show_path, 'tv_show')
+                    pprint.pprint(content)
+                    break
+                    #content_info, images = get_clean_info(content)
+                    for key in ('poster_path', 'backdrop_path'):
+                        image_url = content.get(key)
+                        if image_url:
+                            create_images({IMAGES_MAP[key]: image_url}, show_path)
+                            content.pop(key)
+                    #pprint.pprint(content)
+                    #create_images(images, show_path)
                     main_cast = get_main_cast(
-                        str(content_info['TMDB_id']), 'tv_show')
+                        str(content['id']), 'tv_show')
 
                     for person in main_cast:
                         photo_path = os.path.join(show_path, '.actors')
                         create_images({person['name'].replace(' ',
                                                                '_'): person[
                                                                'photo_url']}, photo_path)
-                        content_info['actors'].append(person)
+                        content['actors'].append(person)
 
 
                     # Получаем информацию о кол-ве сезонов сохраненных локально
@@ -106,8 +122,8 @@ def main():
                     # Собираем информацию о сезоне
                     for season_number in seasons:
                         season_info = get_season_info(
-                            season_number, content_info['TMDB_id'],
-                            content_info['title'])
+                            season_number, content['id'],
+                            content['title'])
                         season_path = os.path.join(
                             show_path, seasons[season_number])
                         season_files = [file.name for file in os.scandir(
@@ -130,7 +146,7 @@ def main():
 
 
 
-                        for season in content_info['seasons']:
+                        for season in content['seasons']:
                             season_number = season['season_number']
                             if season_number in seasons:
                                 if len(str(season_number)) < 2:
@@ -139,7 +155,7 @@ def main():
                                 poster_url = f'{TMDB_IMAGES}{season['poster_path']}'
                                 create_images({poster_name: poster_url}, show_path)
 
-                        create_nfo(content_info, show_path, 'tv_show')
+                        create_nfo(content, show_path, 'tv_show')
 
         except Exception as e:
             error_message = f'Сбой в работе программы:\n{e}'

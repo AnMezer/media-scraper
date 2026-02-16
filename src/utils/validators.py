@@ -14,7 +14,11 @@ from src.utils.exceptions import (
 
 
 def validate_types_from_annotation():
+    """
 
+    Returns:
+        None: 
+    """
     try:
         caller_frame = inspect.currentframe().f_back
         if not caller_frame:
