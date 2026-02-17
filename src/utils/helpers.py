@@ -22,7 +22,8 @@ from config.settings import TELEGRAM_CHAT_ID, TMDB_GET_SHOW, TMDB_SEARCH_SHOW, \
     EPISODE_INFO_STRUCTURE, IMAGES_MAP, FILM_INFO_STRUCTURE, IMAGES_KEYS
 from src.main import SPLITTERS
 from src.utils.exceptions import APIAnswerWrongDataError, APIConnectionError, \
-    NoContentError, NoYearError, ScraperError, ALotOfContentError
+    NoContentError, NoYearError, ScraperError, ALotOfContentError, \
+    ResponseProcessingError
 from src.utils.validators import check_request_status, validate_types, validate_types_from_annotation
 from utils.exceptions import NfoCreateError
 
@@ -47,10 +48,12 @@ def send_message(bot: TeleBot, message: str) -> bool:
     return True
 
 
-def fetch_data(parse_json: bool = True, **request_params) -> dict | None:
+def fetch_data(data_type: str, **request_params) -> dict | None:
     """
-    Отправляет GET запрос к API, возвращает распарсеный ответ.
+    Отправляет GET запрос к API, выполняет первичное преобразование ответа
+    в зависимости от параметра type.
     Args:
+        type: Необходимый тип данных (json или content).
         **request_params: Параметры запроса.
     Raises:
         RequestException: Ошибка при получении ответа.
@@ -60,8 +63,13 @@ def fetch_data(parse_json: bool = True, **request_params) -> dict | None:
         APIConnectionError: Код ответа отличен от ожидаемых.
         JSONDecodeError: Не удалось распарсить ответ API
     Returns:
-        Распарсеный JSON или None, если 404.
+        Ответ API приведенный к нужному типу.
+        None, если 404.
     """
+    expected_data_types = ('content', 'json')
+    if data_type not in expected_data_types:
+        raise ValueError(f'Неподдерживаемый тип данных. '
+                         f'Ожидаются {", ".join(expected_data_types)}')
     try:
         response = requests.get(**request_params)
     except RequestException as e:
@@ -72,12 +80,14 @@ def fetch_data(parse_json: bool = True, **request_params) -> dict | None:
     check_request_status(status_code)
     if status_code == HTTPStatus.NOT_FOUND:
         return None
-    if not parse_json:
-        return response
     try:
-        return response.json()
-    except ValueError as e:
-        raise JSONDecodeError(f'Ошибка парсинга json: {e}')
+        match data_type:
+            case 'content':
+                return response.content
+            case 'json':
+                return response.json()
+    except (AttributeError, JSONDecodeError) as e:
+        raise ResponseProcessingError(f'Ошибка обработки ответа API {e}')
 
 
 def is_nfo_file_exists(
@@ -156,7 +166,7 @@ def get_content_by_id(id: int, content_type: str):
                       'params': {'language': 'ru-Ru'}
                       }
 
-    content = fetch_data(**request_params)
+    content = fetch_data('json', **request_params)
     validate_types(content=(content, dict))
 
     # Проверка наличия нужного ключа в ответе
@@ -257,7 +267,7 @@ def get_content(
                                  'year': content_year if content_year
                                           else None}
                       }
-    content = fetch_data(**request_params)
+    content = fetch_data('json', **request_params)
     validate_types(content=(content, dict))
 
     # Проверка наличия нужного ключа в ответе
@@ -447,7 +457,9 @@ def create_image(image_name: str, url_path: str, path:str):
     validate_types_from_annotation()
     os.makedirs(path, exist_ok=True)
     url = urljoin(TMDB_IMAGES, url_path)
-
+    try:
+        response: request = fetch_data(False, url=url).content
+        response.content
 
 
     for image_type, url in images.items():

@@ -61,6 +61,8 @@ class NoContentError(ScraperError):
 class ALotOfContentError(ScraperError):
     """Не удалось однозначно идентифицировать произведение"""
 
+class ResponseProcessingError(ScraperError):
+    """Ошибка обработки ответа API"""
     
 
 
