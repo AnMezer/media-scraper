@@ -73,18 +73,38 @@ def main():
             for show in tv_shows:
                 show_path = os.path.join(tv_shows_path, show)
 
-                # Если nfo-файла нет, создаем его.
+                # Если корневого nfo-файла нет, обрабатываем папку
                 if not is_nfo_file_exists(show_path, 'tv_show', show):
+
+                    #----------------------------------------------------------
+                    # Получаем информацию о кол-ве сезонов сохраненных локально
+                    seasons_folders = [season.name for season in
+                                       os.scandir(show_path)
+                                       if season.is_dir() and re.search(
+                            r'(\d{1,2})$', season.name)]
+
+                    # Собираем словарь {№_сезона: папка_сезона}
+                    seasons_local = {}
+                    for season_folder in seasons_folders:
+                        match = re.search(r'(\d{1,2})', season_folder)
+                        seeason_number = int(match.group(1))  # Нужно добавить проверку
+                        seasons_local[seeason_number] = season_folder
+                    #----------------------------------------------------------
+
                     content_title, content_year = get_content_name_year(
                                                                 show, 'tv_show')
-                    content = get_content(
-                        content_title, content_year, 'tv_show', show_path)
 
+                    raw_content = get_content(
+                        content_title, content_year, 'tv_show', show_path)
+                    content = get_clean_info(raw_content, 'tv_show',
+                                             list(seasons_local.keys()))
                     # Добавляем список актеров
-                    main_cast = get_main_cast(str(content['id']), 'tv_show')
+                    main_cast = get_main_cast(str(content['TMDB_id']),
+                                              'tv_show')
                     content['actors'] = []
                     for person in main_cast:
                         content['actors'].append(person)
+
                     create_nfo(content, show_path, 'tv_show')
                     pprint.pprint(content)
                     break
@@ -107,18 +127,7 @@ def main():
                         content['actors'].append(person)
 
 
-                    # Получаем информацию о кол-ве сезонов сохраненных локально
-                    seasons_folders = [season.name for season in
-                                     os.scandir(show_path)
-                                     if season.is_dir() and re.search(
-                            r'(\d{1,2})$', season.name)]
 
-                    # Собираем словарь {№_сезона: папка_сезона}
-                    seasons = {}
-                    for season_folder in seasons_folders:
-                        match = re.search(r'(\d{1,2})', season_folder)
-                        seeason_number = int(match.group(1)) # Нужно добавить проверку
-                        seasons[seeason_number] = season_folder
                     # Собираем информацию о сезоне
                     for season_number in seasons:
                         season_info = get_season_info(

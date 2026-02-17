@@ -3,6 +3,8 @@ from inspect import stack
 import pprint
 import re
 from urllib import request
+from urllib.parse import urljoin
+
 #from xml.etree.ElementTree import Element, SubElement
 from lxml import etree
 
@@ -16,7 +18,7 @@ import os
 from config.settings import TELEGRAM_CHAT_ID, TMDB_GET_SHOW, TMDB_SEARCH_SHOW, \
     TMDB_TOKEN, YEAR_STAMP, VIDEO_EXT, TV_SHOW_INFO_STRUCTURE, TMDB_IMAGES, \
     TMDB_SHOW_CREDITS, TMDB_GET_SEASON, SEASON_INFO_STRUCTURE, \
-    EPISODE_INFO_STRUCTURE, IMAGES_MAP, FILM_INFO_STRUCTURE
+    EPISODE_INFO_STRUCTURE, IMAGES_MAP, FILM_INFO_STRUCTURE, IMAGES_KEYS
 from src.main import SPLITTERS
 from src.utils.exceptions import APIAnswerWrongDataError, APIConnectionError, \
     NoContentError, NoYearError, ScraperError, ALotOfContentError
@@ -307,35 +309,56 @@ def get_content(
             return candidates[0]
     raise ScraperError('Ошибка выполнения функции get_content')
 
-def get_clean_info(raw_info: dict):
+def get_clean_info(
+        raw_content: dict, content_type: str, season_numbers: list |  None):
     """
-    Разделяет исходную информацию на два словаря: данные и изображения
+    Удаляет из ответа неиспользуемые данные.
+    Для сезонов заменяет тип данных на словарь, где номер сезона ключ
     Args:
-        raw_info: Словарь с сырыми данными
+        raw_info: Исходная информация из API
+        content_type: movie, episode или tv_show
 
     Returns:
-        content_info - данные для сохранения в nfo файл
-        images - ссылки на изображения
+        content: Словарь с готовыми для сохранения данными.
     """
-    images = {}
-    content_info = {}
     validate_types_from_annotation()
-    for key, value in TV_SHOW_INFO_STRUCTURE.items():
-        clean_value = raw_info.get(value)
-        if value in ('poster_path', 'backdrop_path'):
-            images[key] = f'{TMDB_IMAGES}/{clean_value}'
-        else:
-            content_info[key] = clean_value
-    content_info['actors'] = []
-    return content_info, images
+    try:
+        expected_content_types = ('tv_show', 'episode', 'movie')
+        if content_type not in expected_content_types:
+            raise ValueError(f'Неподдерживаемый тип контента. '
+                             f'Ожидаются {", ".join(expected_content_types)}')
+        if content_type == 'tv_show':
+            key_map = TV_SHOW_INFO_STRUCTURE
+        if content_type == 'episode':
+            key_map = EPISODE_INFO_STRUCTURE
+        if content_type == 'movie':
+            key_map = FILM_INFO_STRUCTURE
+        content = {}
+        for tag, content_tag in key_map.items():
+            if tag != 'seasons':
+                content[tag] = raw_content.get(content_tag)
+            else:
+                seasons = {}
+                for season in raw_content.get(tag):
+                    season_num_api = int(season.get('season_number'))
+                    if int(season_num_api) in season_numbers:
+                        season['showtitle'] = content.get('title')
+                        seasons[season_num_api] = season
+                content[tag] = seasons
+        return content
+
+    except Exception as e:
+        error_msg = (f'Ошибка при очистке ответа API для : {content_type} '
+                     f'{type(e).__name__} - {str(e)}')
+        raise NfoCreateError(error_msg) from e
 
 def create_nfo(
         content: dict, path: str, content_type: str,
         file_name: str | None = None):
     """
-    Создает nfo файл.
+    Создает nfo файл из исходного словаря.
     Args:
-        content_info: Словарь с данными для сохранения в файле.
+        content: Словарь с данными для сохранения в файле.
         path: папка для создания файла.
         content_type: movie или tv_show, episode.
         file_name: имя nfo файла, только для фильмов и эпизодов.
@@ -352,45 +375,42 @@ def create_nfo(
         if content_type == 'tv_show':
             file_name = 'tvshow.nfo'
             root_name = 'tvshow'
-            key_map = TV_SHOW_INFO_STRUCTURE
         if content_type == 'episode':
             file_name = f'{file_name}.nfo'
             root_name = 'episodedetails'
-            key_map = EPISODE_INFO_STRUCTURE
         if content_type == 'movie':
             file_name = f'{file_name}.nfo'
             root_name = 'movie'
-            key_map = FILM_INFO_STRUCTURE
 
         nfo_path = os.path.join(path, file_name)
         root = etree.Element(root_name)
-
-        for tag, content_key in key_map.items():
+        for tag, content_key in content.items():
             # Обработка множественных тэгов
             if tag in ('genres', 'countries'):
-                for elem in content[content_key]:
+                for elem in content_key:
                     elem_tag = etree.SubElement(root, tag)
                     elem_tag.text = str(elem.get('name'))
+
             # Обработка тэгов с вложенностью
             elif tag == 'actors':
-                for actor in content[content_key]:
+                for actor in content_key:
                     tag_actor = etree.SubElement(root, 'actor')
                     for key, value in actor.items():
-                        if key not in IMAGES_MAP:
+                        if key not in IMAGES_KEYS:
                             actor_elem = etree.SubElement(tag_actor, key)
                             actor_elem.text = str(value)
             # Обработка инфо о сезонах
             elif tag == 'seasons':
-                for season in content[content_key]:
+                for s_num, s_content in content_key.items():
                     season_plot = etree.SubElement(root, 'seasonplot')
-                    season_plot.set('number', str(season.get('season_number')))
-                    season_plot.text = str(season.get('overview'))
+                    season_plot.set('number', str(s_num))
+                    season_plot.text = str(s_content.get('overview'))
 
             # Обработка остальных тэгов, пропускаем изображения
             else:
-                if tag not in IMAGES_MAP:
+                if tag not in IMAGES_KEYS:
                     elem = etree.SubElement(root, tag)
-                    elem.text = str(content[content_key])
+                    elem.text = str(content_key)
 
         rough_xml = etree.tostring(root, encoding='utf-8',
                                    xml_declaration=True, pretty_print=True)
@@ -416,7 +436,8 @@ def create_images(images: dict, path):
     validate_types_from_annotation()
     os.makedirs(path, exist_ok=True)
     for image_type, url in images.items():
-        url = f'{TMDB_IMAGES}{url}'
+        url = urljoin(TMDB_IMAGES, url)
+        #url = f'{TMDB_IMAGES}{url}'
         image = requests.get(url=url)
         file_name = f'{image_type}.jpg'
         file_path = os.path.join(path, file_name)
