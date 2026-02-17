@@ -9,6 +9,7 @@ from urllib.parse import urljoin
 from lxml import etree
 
 import requests
+from requests import Response, JSONDecodeError
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
 from requests.exceptions import RequestException
@@ -44,6 +45,39 @@ def send_message(bot: TeleBot, message: str) -> bool:
         return False
     logger.info('Сообщение успешно отправлено в Telegram.')
     return True
+
+
+def fetch_data(parse_json: bool = True, **request_params) -> dict | None:
+    """
+    Отправляет GET запрос к API, возвращает распарсеный ответ.
+    Args:
+        **request_params: Параметры запроса.
+    Raises:
+        RequestException: Ошибка при получении ответа.
+        UnauthorisedError: Ошибка авторизации.
+        RequestLimitExceededError: Превышен дневной или общий лимит на запросы к API.
+        TooManyRequestsError: Превышен секундный лимит на запросы к API.
+        APIConnectionError: Код ответа отличен от ожидаемых.
+        JSONDecodeError: Не удалось распарсить ответ API
+    Returns:
+        Распарсеный JSON или None, если 404.
+    """
+    try:
+        response = requests.get(**request_params)
+    except RequestException as e:
+        error_msg = (
+            f'Ошибка при получении ответа от API {request_params}: {e}')
+        raise APIConnectionError(error_msg)
+    status_code = response.status_code
+    check_request_status(status_code)
+    if status_code == HTTPStatus.NOT_FOUND:
+        return None
+    if not parse_json:
+        return response
+    try:
+        return response.json()
+    except ValueError as e:
+        raise JSONDecodeError(f'Ошибка парсинга json: {e}')
 
 
 def is_nfo_file_exists(
@@ -122,19 +156,7 @@ def get_content_by_id(id: int, content_type: str):
                       'params': {'language': 'ru-Ru'}
                       }
 
-    # Проверка статуса ответа API
-    try:
-        request_content = requests.get(**request_params)
-    except RequestException as e:
-        error_msg = (
-            f'Ошибка при получении ответа от API {request_params}: {e}')
-        raise APIConnectionError(error_msg)
-    status_code = request_content.status_code
-    check_request_status(status_code)
-    if status_code == HTTPStatus.NOT_FOUND:
-        return None
-
-    content: dict = request_content.json()
+    content = fetch_data(**request_params)
     validate_types(content=(content, dict))
 
     # Проверка наличия нужного ключа в ответе
@@ -235,27 +257,15 @@ def get_content(
                                  'year': content_year if content_year
                                           else None}
                       }
-    # Проверка статуса ответа API
-    try:
-        request_search = requests.get(**request_params)
-    except RequestException as e:
-        error_msg = (
-            f'Ошибка при получении ответа от API {request_params}: {e}')
-        raise APIConnectionError(error_msg)
-    status_code = request_search.status_code
-    check_request_status(status_code)
-    if status_code == HTTPStatus.NOT_FOUND:
-        return None
-
-    request_data: dict = request_search.json()
-    validate_types(request_data=(request_data, dict))
+    content = fetch_data(**request_params)
+    validate_types(content=(content, dict))
 
     # Проверка наличия нужного ключа в ответе
-    if 'results' not in request_data:
+    if 'results' not in content:
         msg = 'Ключ results отсутствует в ответе API'
         raise APIAnswerWrongDataError(msg)
 
-    results = request_data.get('results')
+    results = content.get('results')
     if results is None:
         return None
     if len(results) == 0:
@@ -315,9 +325,9 @@ def get_clean_info(
     Удаляет из ответа неиспользуемые данные.
     Для сезонов заменяет тип данных на словарь, где номер сезона ключ
     Args:
-        raw_info: Исходная информация из API
+        raw_content: Исходная информация из API
         content_type: movie, episode или tv_show
-
+        season_numbers: список с номерами имеющихся локально сезонов
     Returns:
         content: Словарь с готовыми для сохранения данными.
     """
@@ -423,11 +433,12 @@ def create_nfo(
                      f'{type(e).__name__} - {str(e)}')
         raise NfoCreateError(error_msg) from e
 
-def create_images(images: dict, path):
+def create_image(image_name: str, url_path: str, path:str):
     """
     Загружает и создает изображения.
     Args:
-        images: Словарь {название файла: ссылка}
+        image_name: Имя, с которым следует создать файл
+        url_path: последний сегмент ссылки на изображения (/3851982849458.jpg)
         path: Адрес папки для сохранения
 
     Returns:
@@ -435,6 +446,10 @@ def create_images(images: dict, path):
     """
     validate_types_from_annotation()
     os.makedirs(path, exist_ok=True)
+    url = urljoin(TMDB_IMAGES, url_path)
+
+
+
     for image_type, url in images.items():
         url = urljoin(TMDB_IMAGES, url)
         #url = f'{TMDB_IMAGES}{url}'

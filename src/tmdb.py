@@ -50,7 +50,7 @@ from src.utils.validators import validate_types, check_request_status
 from src.utils.helpers import (get_content,
                              get_content_name_year, send_message, is_nfo_file_exists)
 from utils.exceptions import ALotOfContentError
-from utils.helpers import get_clean_info, create_nfo, create_images, \
+from utils.helpers import get_clean_info, create_nfo, create_image, \
     get_main_cast, get_season_info
 
 SPLITTERS = r'[_.()]'
@@ -104,9 +104,7 @@ def main():
                     content['actors'] = []
                     for person in main_cast:
                         content['actors'].append(person)
-
                     create_nfo(content, show_path, 'tv_show')
-                    pprint.pprint(content)
                     break
                     #content_info, images = get_clean_info(content)
                     for key in ('poster_path', 'backdrop_path'):
@@ -170,6 +168,7 @@ def main():
             error_message = f'Сбой в работе программы:\n{e}'
             if error_message != latest_error_msg:
                 try:
+                    logger.error(error_message)
                     send_message(bot, error_message)
                     latest_error_msg = error_message
                 except Exception:

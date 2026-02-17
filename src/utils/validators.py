@@ -108,9 +108,7 @@ def check_request_status(status_code: int):
             raise BadRequestError()
         case HTTPStatus.UNPROCESSABLE_ENTITY:
             raise UnprocessableEntityError()
-        case HTTPStatus.OK:
-            pass
-        case HTTPStatus.NOT_FOUND:
+        case HTTPStatus.OK | HTTPStatus.NOT_FOUND:
             pass
         case _:
             raise APIConnectionError(f'API вернул код: {status_code}')
