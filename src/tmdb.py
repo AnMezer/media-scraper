@@ -104,7 +104,11 @@ def main():
                     content['actors'] = []
                     for person in main_cast:
                         content['actors'].append(person)
-                    create_nfo(content, show_path, 'tv_show')
+                    #create_nfo(content, show_path, 'tv_show')
+                    pprint.pprint(content)
+                    for key in ('poster_path', 'backdrop_path'):
+                        image_name = IMAGES_MAP.get(key)
+                        create_image(image_name, content[key], show_path)
                     break
                     #content_info, images = get_clean_info(content)
                     for key in ('poster_path', 'backdrop_path'):
@@ -165,7 +169,7 @@ def main():
                         create_nfo(content, show_path, 'tv_show')
 
         except Exception as e:
-            error_message = f'Сбой в работе программы:\n{e}'
+            error_message = f'Сбой в работе программы:\n{type(e).__name__} {e}'
             if error_message != latest_error_msg:
                 try:
                     logger.error(error_message)

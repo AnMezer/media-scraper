@@ -63,6 +63,9 @@ class ALotOfContentError(ScraperError):
 
 class ResponseProcessingError(ScraperError):
     """Ошибка обработки ответа API"""
+
+class CreateImageError(ScraperError):
+    """Ошибка сохранения изображения"""
     
 
 

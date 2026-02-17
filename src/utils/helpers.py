@@ -25,7 +25,7 @@ from src.utils.exceptions import APIAnswerWrongDataError, APIConnectionError, \
     NoContentError, NoYearError, ScraperError, ALotOfContentError, \
     ResponseProcessingError
 from src.utils.validators import check_request_status, validate_types, validate_types_from_annotation
-from utils.exceptions import NfoCreateError
+from utils.exceptions import NfoCreateError, CreateImageError
 
 logger = logging.getLogger(f'Media scraper.{__name__}')
 
@@ -48,12 +48,12 @@ def send_message(bot: TeleBot, message: str) -> bool:
     return True
 
 
-def fetch_data(data_type: str, **request_params) -> dict | None:
+def fetch_data(data_type: str, **request_params) -> dict | bytes| None:
     """
     Отправляет GET запрос к API, выполняет первичное преобразование ответа
     в зависимости от параметра type.
     Args:
-        type: Необходимый тип данных (json или content).
+        data_type: Необходимый тип данных (json или content).
         **request_params: Параметры запроса.
     Raises:
         RequestException: Ошибка при получении ответа.
@@ -86,7 +86,7 @@ def fetch_data(data_type: str, **request_params) -> dict | None:
                 return response.content
             case 'json':
                 return response.json()
-    except (AttributeError, JSONDecodeError) as e:
+    except JSONDecodeError as e:
         raise ResponseProcessingError(f'Ошибка обработки ответа API {e}')
 
 
@@ -456,20 +456,15 @@ def create_image(image_name: str, url_path: str, path:str):
     """
     validate_types_from_annotation()
     os.makedirs(path, exist_ok=True)
-    url = urljoin(TMDB_IMAGES, url_path)
+    url = urljoin(TMDB_IMAGES, url_path[1:])
+    image = fetch_data('content', url=url)
+    file_name = f'{image_name}.jpg'
+    file_path = os.path.join(path, file_name)
     try:
-        response: request = fetch_data(False, url=url).content
-        response.content
-
-
-    for image_type, url in images.items():
-        url = urljoin(TMDB_IMAGES, url)
-        #url = f'{TMDB_IMAGES}{url}'
-        image = requests.get(url=url)
-        file_name = f'{image_type}.jpg'
-        file_path = os.path.join(path, file_name)
         with open(file_path, 'wb') as f:
-            f.write(image.content)
+            f.write(image)
+    except (PermissionError, OSError, IsADirectoryError) as e:
+        raise CreateImageError(f'Ошибка при сохранении изображения: {e}')
 
 def get_main_cast(content_id: str, content_type: str):
     """
