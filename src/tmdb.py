@@ -80,7 +80,7 @@ def main():
                     seasons_folders = [season.name for season in
                                        os.scandir(show_path)
                                        if season.is_dir() and re.search(
-                            r'(\d{1,2})$', season.name)]
+                                                    r'(\d{1,2})$', season.name)]
 
                     # Собираем словарь {№_сезона: папка_сезона}
                     seasons_local = {}
@@ -97,12 +97,15 @@ def main():
                         content_title, content_year, 'tv_show', show_path)
                     content = get_clean_info(raw_content, 'tv_show',
                                              list(seasons_local.keys()))
-                    # Добавляем список актеров
+                    # Добавляем список актеров в content, сохраняем их фото
                     #----------------------------------------------------------
                     main_cast = get_main_cast(str(content['TMDB_id']),
                                               'tv_show')
                     content['actors'] = []
                     for person in main_cast:
+                        actors_path = os.path.join(show_path, '.actors')
+                        person_name = person['name'].replace(' ', '_')
+                        create_image(person_name, person['photo_url'], actors_path)
                         content['actors'].append(person)
                     #----------------------------------------------------------
 
@@ -133,10 +136,8 @@ def main():
                         create_image(
                                  image_name, s_data['poster_path'], show_path)
 
-
-                        # создаем постеры и nfo для серий
+                        # Получаем список серий
                         season_path = os.path.join(show_path, seasons_local[s_num])
-                        # Получаем список серий (имена файлов без расширения)
                         files = [file.name for file in os.scandir(
                                                  season_path) if file.is_file()]
                         for file in files:

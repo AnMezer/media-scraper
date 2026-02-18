@@ -456,7 +456,7 @@ def create_image(image_name: str, url_path: str, path:str):
     """
     validate_types_from_annotation()
     os.makedirs(path, exist_ok=True)
-    url = urljoin(TMDB_IMAGES, url_path[1:]) # нужна проверка типа данных
+    url = f'{TMDB_IMAGES}{url_path}'
     image = fetch_data('content', url=url)
     file_name = f'{image_name}.jpg'
     file_path = os.path.join(path, file_name)
@@ -505,17 +505,9 @@ def get_main_cast(content_id: str, content_type: str):
         person_info['role'] = person.get('character')
         person_info['order'] = person.get('order')
         person_info['id'] = person.get('id')
-        raw_url = person.get('profile_path')
-        if raw_url is not None:
-            person_info['photo_url'] = f'{TMDB_IMAGES}{raw_url}'
-        full_info = True
-        for tag in person_info:
-            if tag is None:
-                full_info = False
-        if full_info:
-            cast.append(person_info)
-        else:
-            continue
+        person_info['photo_url'] = person.get('profile_path')
+        cast.append(person_info)
+
     return cast
 
 def get_season_info(season_num, id):
