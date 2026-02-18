@@ -456,7 +456,7 @@ def create_image(image_name: str, url_path: str, path:str):
     """
     validate_types_from_annotation()
     os.makedirs(path, exist_ok=True)
-    url = urljoin(TMDB_IMAGES, url_path[1:])
+    url = urljoin(TMDB_IMAGES, url_path[1:]) # нужна проверка типа данных
     image = fetch_data('content', url=url)
     file_name = f'{image_name}.jpg'
     file_path = os.path.join(path, file_name)
@@ -464,7 +464,8 @@ def create_image(image_name: str, url_path: str, path:str):
         with open(file_path, 'wb') as f:
             f.write(image)
     except (PermissionError, OSError, IsADirectoryError) as e:
-        raise CreateImageError(f'Ошибка при сохранении изображения: {e}')
+        raise CreateImageError(
+            f'Ошибка при сохранении изображения {file_path}: {e}')
 
 def get_main_cast(content_id: str, content_type: str):
     """

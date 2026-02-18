@@ -106,9 +106,21 @@ def main():
                         content['actors'].append(person)
                     #create_nfo(content, show_path, 'tv_show')
                     pprint.pprint(content)
+
+                    #----------------------------------------------------------
+                    # Создаем изображения
+                    # Постер сериала и фон-задник
                     for key in ('poster_path', 'backdrop_path'):
                         image_name = IMAGES_MAP.get(key)
                         create_image(image_name, content[key], show_path)
+                    # Постеры сезонов
+                    for s_num, s_data in content['seasons'].items():
+                        s_num = (
+                            f'0{s_num}' if len(str(s_num)) < 2 else str(s_num))
+                        image_name = f'season{s_num}-poster'
+                        create_image(
+                            image_name, s_data['poster_path'], show_path)
+                    #----------------------------------------------------------
                     break
                     #content_info, images = get_clean_info(content)
                     for key in ('poster_path', 'backdrop_path'):
