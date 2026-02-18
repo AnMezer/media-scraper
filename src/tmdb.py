@@ -46,10 +46,10 @@ from src.utils.exceptions import (
 )
 from src.utils.logger import setup_logger
 from src.utils.validators import validate_types, check_request_status
-from src.utils.helpers import (get_content,
+from src.utils.utils import (get_content,
                              get_content_name_year, send_message, is_nfo_file_exists)
 from utils.exceptions import ALotOfContentError
-from utils.helpers import get_clean_info, create_nfo, create_image, \
+from utils.utils import get_clean_info, create_nfo, create_image, \
     get_main_cast, get_season_info
 
 SPLITTERS = r'[_.()]'
@@ -58,6 +58,27 @@ SPLITTERS = r'[_.()]'
 logger_name = 'Media scraper'
 logger = setup_logger(logger_name)
 bot = TeleBot(token=TELEGRAM_BOT_TOKEN)
+
+def get_seasons_local_data(show_path: str) -> dict:
+    """
+    Собирает информацию о сезонах имеющихся в хранилище
+    Args:
+        show_path: Путь к папке с сериалом
+
+    Returns:
+        seasons_local: словарь {№_сезона: папка_сезона}
+    """
+    seasons_folders = [
+        season.name for season in os.scandir(show_path)
+        if season.is_dir() and re.search(r'(\d{1,2})$', season.name)]
+
+    # Собираем словарь {№_сезона: папка_сезона}
+    seasons_local = {}
+    for season_folder in seasons_folders:
+        match = re.search(r'(\d{1,2})', season_folder)
+        seeason_number = int(match.group(1))
+        seasons_local[seeason_number] = season_folder
+    return seasons_local
 
 
 def main():
@@ -74,22 +95,8 @@ def main():
 
                 # Если корневого nfo-файла нет, обрабатываем папку
                 if not is_nfo_file_exists(show_path, 'tv_show', show):
-
-                    #----------------------------------------------------------
-                    # Получаем информацию о кол-ве сезонов сохраненных локально
-                    seasons_folders = [season.name for season in
-                                       os.scandir(show_path)
-                                       if season.is_dir() and re.search(
-                                                    r'(\d{1,2})$', season.name)]
-
-                    # Собираем словарь {№_сезона: папка_сезона}
-                    seasons_local = {}
-                    for season_folder in seasons_folders:
-                        match = re.search(r'(\d{1,2})', season_folder)
-                        seeason_number = int(match.group(1))  # Нужно добавить проверку
-                        seasons_local[seeason_number] = season_folder
-                    #----------------------------------------------------------
-
+                    images_to_download = []
+                    seasons_local = get_seasons_local_data(show_path)
                     content_title, content_year = get_content_name_year(
                                                                 show, 'tv_show')
 
@@ -103,10 +110,13 @@ def main():
                                               'tv_show')
                     content['actors'] = []
                     for person in main_cast:
+                        content['actors'].append(person)
                         actors_path = os.path.join(show_path, '.actors')
                         person_name = person['name'].replace(' ', '_')
-                        create_image(person_name, person['photo_url'], actors_path)
-                        content['actors'].append(person)
+                        images_to_download.append({
+                            'image_name': person_name,
+                            'url_path': person['photo_url'],
+                            'path': actors_path})
                     #----------------------------------------------------------
 
                     # Добавляем информацию о сериях в сезоны
@@ -124,8 +134,11 @@ def main():
                     # Создаем постер сериала, фон-задник и nfo для сериала
                     for key in ('poster_path', 'backdrop_path'):
                         image_name = IMAGES_MAP.get(key)
-                        create_image(image_name, content[key], show_path)
-                    create_nfo(content, show_path, 'tv_show')
+                        images_to_download.append({
+                            'image_name': image_name,
+                            'url_path': content[key],
+                            'path': show_path})
+
 
                     # Обрабатываем сезоны
                     for s_num, s_data in content['seasons'].items():
@@ -133,8 +146,10 @@ def main():
                         s_number = (
                             f'0{s_num}' if len(str(s_num)) < 2 else str(s_num))
                         image_name = f'season{s_number}-poster'
-                        create_image(
-                                 image_name, s_data['poster_path'], show_path)
+                        images_to_download.append({
+                            'image_name': image_name,
+                            'url_path': s_data['poster_path'],
+                            'path': show_path})
 
                         # Получаем список серий
                         season_path = os.path.join(show_path, seasons_local[s_num])
@@ -148,60 +163,18 @@ def main():
                                      if match:
                                          episode_num = int(match.group(2))
                                          if not is_nfo_file_exists(
-                                                 season_path, 'episode',
-                                                 file_name):
+                                                 season_path, 'episode', file_name):
+                                            episode_data = content['seasons'][s_num]['episodes'][episode_num]
                                             poster_name = f'{file_name}-thumb'
-                                            create_nfo(
-                                                content['seasons'][s_num][
-                                                'episodes'][
-                                                           episode_num],
-                                                season_path, 'episode',
-                                                file_name)
-                                            create_image(poster_name, content['seasons'][s_num][
-                                                'episodes'][
-                                                           episode_num][
-                                                'episode_poster'], season_path)
+                                            create_nfo(episode_data, season_path, 'episode', file_name)
+                                            images_to_download.append({
+                                                'image_name': poster_name,
+                                                'url_path': episode_data['episode_poster'],
+                                                'path': season_path})
 
-                    #----------------------------------------------------------
-
-
-                    # Собираем информацию о сезоне
-                    # for season_number in seasons:
-                    #     season_info = get_season_info(
-                    #         season_number, content['id'],
-                    #         content['title'])
-                    #     season_path = os.path.join(
-                    #         show_path, seasons[season_number])
-                    #     season_files = [file.name for file in os.scandir(
-                    #             season_path) if file.is_file()]
-                    #     for file in season_files:
-                    #         episode_name, ext = os.path.splitext(file)
-                    #         if ext in VIDEO_EXT:
-                    #             match = re.search(r'S(\d{1,2})E(\d{1,'
-                    #                               r'2})', episode_name)
-                    #             if match:
-                    #                 if not is_nfo_file_exists(season_path,
-                    #                                     'episode',
-                    #                                           episode_name):
-                    #                     s_number = int(match.group(1))
-                    #                     ep_number = int(match.group(2))
-                    #                     create_nfo(season_info['episodes'][
-                    #                                    ep_number],
-                    #                                season_path, 'episode',
-                    #                                episode_name)
-                    #
-                    #
-                    #
-                    #     for season in content['seasons']:
-                    #         season_number = season['season_number']
-                    #         if season_number in seasons:
-                    #             if len(str(season_number)) < 2:
-                    #                 season_number = f'0{season_number}'
-                    #             poster_name = f'season{season_number}-poster'
-                    #             poster_url = f'{TMDB_IMAGES}{season['poster_path']}'
-                    #             create_images({poster_name: poster_url}, show_path)
-                    #
-                    #     create_nfo(content, show_path, 'tv_show')
+                    create_nfo(content, show_path, 'tv_show')
+                    for image in images_to_download:
+                        create_image(**image)
 
         except Exception as e:
             error_message = f'Сбой в работе программы:\n{type(e).__name__} {e}'
