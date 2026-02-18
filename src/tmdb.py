@@ -36,7 +36,6 @@ from config.settings import (
     CARTOONS_FOLDER,
     TV_SHOWS_FOLDER, TMDB_IMAGES, IMAGES_MAP
 )
-from src.main import is_nfo_file_exists
 from src.utils.exceptions import (
     APIAnswerWrongDataError,
     APIConnectionError,
@@ -99,86 +98,109 @@ def main():
                     content = get_clean_info(raw_content, 'tv_show',
                                              list(seasons_local.keys()))
                     # Добавляем список актеров
+                    #----------------------------------------------------------
                     main_cast = get_main_cast(str(content['TMDB_id']),
                                               'tv_show')
                     content['actors'] = []
                     for person in main_cast:
                         content['actors'].append(person)
-                    #create_nfo(content, show_path, 'tv_show')
-                    pprint.pprint(content)
+                    #----------------------------------------------------------
+
+                    # Добавляем информацию о сериях в сезоны
+                    for season_num, season_data in content['seasons'].items():
+                        episodes = content['seasons'][season_num]['episodes'] = {}
+                        raw_episodes_data = get_season_info(
+                                                season_num, content['TMDB_id'])
+                        for raw_ep_data in raw_episodes_data.values():
+                            episode_data = get_clean_info(
+                                                 raw_ep_data, 'episode', None)
+                            episode_data['showtitle'] = content['title']
+                            episodes[episode_data['episode']] = episode_data
 
                     #----------------------------------------------------------
-                    # Создаем изображения
-                    # Постер сериала и фон-задник
+                    # Создаем постер сериала, фон-задник и nfo для сериала
                     for key in ('poster_path', 'backdrop_path'):
                         image_name = IMAGES_MAP.get(key)
                         create_image(image_name, content[key], show_path)
-                    # Постеры сезонов
+                    create_nfo(content, show_path, 'tv_show')
+
+                    # Обрабатываем сезоны
                     for s_num, s_data in content['seasons'].items():
-                        s_num = (
+                        # Создаем постеры сезонов
+                        s_number = (
                             f'0{s_num}' if len(str(s_num)) < 2 else str(s_num))
-                        image_name = f'season{s_num}-poster'
+                        image_name = f'season{s_number}-poster'
                         create_image(
-                            image_name, s_data['poster_path'], show_path)
+                                 image_name, s_data['poster_path'], show_path)
+
+
+                        # создаем постеры и nfo для серий
+                        season_path = os.path.join(show_path, seasons_local[s_num])
+                        # Получаем список серий (имена файлов без расширения)
+                        files = [file.name for file in os.scandir(
+                                                 season_path) if file.is_file()]
+                        for file in files:
+                            file_name, ext = os.path.splitext(file)
+                            if ext in VIDEO_EXT:
+                                     match = re.search(
+                                         r'S(\d{1,2})E(\d{1,2})', file_name)
+                                     if match:
+                                         episode_num = int(match.group(2))
+                                         if not is_nfo_file_exists(
+                                                 season_path, 'episode',
+                                                 file_name):
+                                            poster_name = f'{file_name}-thumb'
+                                            create_nfo(
+                                                content['seasons'][s_num][
+                                                'episodes'][
+                                                           episode_num],
+                                                season_path, 'episode',
+                                                file_name)
+                                            create_image(poster_name, content['seasons'][s_num][
+                                                'episodes'][
+                                                           episode_num][
+                                                'episode_poster'], season_path)
+
                     #----------------------------------------------------------
-                    break
-                    #content_info, images = get_clean_info(content)
-                    for key in ('poster_path', 'backdrop_path'):
-                        image_url = content.get(key)
-                        if image_url:
-                            create_images({IMAGES_MAP[key]: image_url}, show_path)
-                            content.pop(key)
-                    #pprint.pprint(content)
-                    #create_images(images, show_path)
-                    main_cast = get_main_cast(
-                        str(content['id']), 'tv_show')
-
-                    for person in main_cast:
-                        photo_path = os.path.join(show_path, '.actors')
-                        create_images({person['name'].replace(' ',
-                                                               '_'): person[
-                                                               'photo_url']}, photo_path)
-                        content['actors'].append(person)
-
 
 
                     # Собираем информацию о сезоне
-                    for season_number in seasons:
-                        season_info = get_season_info(
-                            season_number, content['id'],
-                            content['title'])
-                        season_path = os.path.join(
-                            show_path, seasons[season_number])
-                        season_files = [file.name for file in os.scandir(
-                                season_path) if file.is_file()]
-                        for file in season_files:
-                            episode_name, ext = os.path.splitext(file)
-                            if ext in VIDEO_EXT:
-                                match = re.search(r'S(\d{1,2})E(\d{1,'
-                                                  r'2})', episode_name)
-                                if match:
-                                    if not is_nfo_file_exists(season_path,
-                                                        'episode',
-                                                              episode_name):
-                                        s_number = int(match.group(1))
-                                        ep_number = int(match.group(2))
-                                        create_nfo(season_info['episodes'][
-                                                       ep_number],
-                                                   season_path, 'episode',
-                                                   episode_name)
-
-
-
-                        for season in content['seasons']:
-                            season_number = season['season_number']
-                            if season_number in seasons:
-                                if len(str(season_number)) < 2:
-                                    season_number = f'0{season_number}'
-                                poster_name = f'season{season_number}-poster'
-                                poster_url = f'{TMDB_IMAGES}{season['poster_path']}'
-                                create_images({poster_name: poster_url}, show_path)
-
-                        create_nfo(content, show_path, 'tv_show')
+                    # for season_number in seasons:
+                    #     season_info = get_season_info(
+                    #         season_number, content['id'],
+                    #         content['title'])
+                    #     season_path = os.path.join(
+                    #         show_path, seasons[season_number])
+                    #     season_files = [file.name for file in os.scandir(
+                    #             season_path) if file.is_file()]
+                    #     for file in season_files:
+                    #         episode_name, ext = os.path.splitext(file)
+                    #         if ext in VIDEO_EXT:
+                    #             match = re.search(r'S(\d{1,2})E(\d{1,'
+                    #                               r'2})', episode_name)
+                    #             if match:
+                    #                 if not is_nfo_file_exists(season_path,
+                    #                                     'episode',
+                    #                                           episode_name):
+                    #                     s_number = int(match.group(1))
+                    #                     ep_number = int(match.group(2))
+                    #                     create_nfo(season_info['episodes'][
+                    #                                    ep_number],
+                    #                                season_path, 'episode',
+                    #                                episode_name)
+                    #
+                    #
+                    #
+                    #     for season in content['seasons']:
+                    #         season_number = season['season_number']
+                    #         if season_number in seasons:
+                    #             if len(str(season_number)) < 2:
+                    #                 season_number = f'0{season_number}'
+                    #             poster_name = f'season{season_number}-poster'
+                    #             poster_url = f'{TMDB_IMAGES}{season['poster_path']}'
+                    #             create_images({poster_name: poster_url}, show_path)
+                    #
+                    #     create_nfo(content, show_path, 'tv_show')
 
         except Exception as e:
             error_message = f'Сбой в работе программы:\n{type(e).__name__} {e}'

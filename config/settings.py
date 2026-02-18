@@ -59,7 +59,6 @@ TV_SHOW_INFO_STRUCTURE = {
     'seasons': 'seasons',
     'poster_path': 'poster_path',
     'backdrop_path': 'backdrop_path'
-    #'actors': 'actors'
 
 
 }
@@ -72,16 +71,18 @@ SEASON_INFO_STRUCTURE = {
     'episodes': {}
    }
 EPISODE_INFO_STRUCTURE = {
-        'showtitle': '',
+        'showtitle': 'showtitle',
         'title': 'name',
         'season': 'season_number',
         'episode': 'episode_number',
         'plot': 'overview',
         'aired': 'air_date',
         'TMDB_id': 'id',
+        'episode_poster': 'still_path'
     }
 IMAGES_MAP = {'poster_path': 'poster',
               'backdrop_path': 'fanart',
               'profile_path': 'photo'}
-IMAGES_KEYS = ('poster_path', 'backdrop_path', 'profile_path', 'photo_url')
+IMAGES_KEYS = ('poster_path', 'backdrop_path', 'profile_path',
+               'photo_url', 'episode_poster')
 # HEADERS = {'x-api-key': os.getenv('x_api_key')}

@@ -99,11 +99,11 @@ def is_nfo_file_exists(
         content_type: Тип контента(tv_show, episode или movie)
         content_name: Название контента,
             - для сериалов имя корневой папки сериала.
-            - для фильмов имя фидеофайла без расширения
+            - для фильмов имя видеофайла без расширения
 
 
     Returns:
-        True, есди nfo-файл существует, иначе False
+        True, если nfo-файл существует, иначе False
     """
 
     validate_types_from_annotation()
@@ -518,37 +518,32 @@ def get_main_cast(content_id: str, content_type: str):
             continue
     return cast
 
-def get_season_info(season_num, id, showtitle):
+def get_season_info(season_num, id):
     """
     Возвращает словарь с информацией о сезоне.
     Args:
         season_num: Номер сезона
         id: id сериала
-        showtitle: Название сериала
     Returns:
         Словарь с общей информацией о сезоне и списком с информацией о сериях.
     """
-    validate_types_from_annotation()
     request_params = {'url': TMDB_GET_SEASON.format(id, season_num),
                       'headers': {'Authorization': f'Bearer {TMDB_TOKEN}'},
                       'params': {'language': 'ru-Ru'}
                       }
 
     # Проверка статуса ответа API
-    try:
-        request_season = requests.get(**request_params)
-    except RequestException as e:
-        error_msg = (
-            f'Ошибка при получении ответа от API {request_params}: {e}')
-        raise APIConnectionError(error_msg)
-    status_code = request_season.status_code
-    check_request_status(status_code)
-    if status_code == HTTPStatus.NOT_FOUND:
-        return None
-
-    request_data: dict = request_season.json()
-    validate_types(request_data=(request_data, dict))
-    episodes = request_data['episodes']
+    season_data = fetch_data('json', **request_params)
+    validate_types(request_data=(season_data, dict))
+    episodes_data = season_data.get('episodes')
+    if episodes_data and len(episodes_data) > 0:
+        episodes_result = {}
+        for episode in episodes_data:
+            ep_number = episode['episode_number']
+            episodes_result[ep_number] = episode
+        return episodes_result
+    raise NoContentError(f'TMDB_id - {id}:'
+                         f'В ответе API нет информации о сезонах ')
     season_info = {}
 
     for tag, tag_info in SEASON_INFO_STRUCTURE.items():
