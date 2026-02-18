@@ -96,6 +96,7 @@ def main():
                 # Если корневого nfo-файла нет, обрабатываем папку
                 if not is_nfo_file_exists(show_path, 'tv_show', show):
                     images_to_download = []
+                    nfos_to_create = []
                     seasons_local = get_seasons_local_data(show_path)
                     content_title, content_year = get_content_name_year(
                                                                 show, 'tv_show')
@@ -166,13 +167,22 @@ def main():
                                                  season_path, 'episode', file_name):
                                             episode_data = content['seasons'][s_num]['episodes'][episode_num]
                                             poster_name = f'{file_name}-thumb'
-                                            create_nfo(episode_data, season_path, 'episode', file_name)
+                                            nfos_to_create.append({
+                                                'content': episode_data,
+                                                'path': season_path,
+                                                'content_type': 'episode',
+                                                'file_name': file_name
+                                            })
                                             images_to_download.append({
                                                 'image_name': poster_name,
                                                 'url_path': episode_data['episode_poster'],
                                                 'path': season_path})
-
-                    create_nfo(content, show_path, 'tv_show')
+                    nfos_to_create.append({'content': content,
+                                           'path': show_path,
+                                           'content_type': 'tv_show',
+                                           'file_name': None})
+                    for nfo in nfos_to_create:
+                        create_nfo(**nfo)
                     for image in images_to_download:
                         create_image(**image)
 
