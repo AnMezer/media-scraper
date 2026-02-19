@@ -3,6 +3,7 @@ import pprint
 import re
 import time
 from http import HTTPStatus
+from unittest import result
 from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
 from cachetools.func import ttl_cache
@@ -39,7 +40,7 @@ from .utils.exceptions import (
     APIAnswerWrongDataError,
     APIConnectionError,
     MissingVariableError,
-    NoFilmsError,
+    NoContentError,
     NoYearError,
     NotFoundError
 )
@@ -181,7 +182,7 @@ def get_film_id(
         APIConnectionError: Если не получен или статус отличен от 200.
         TypeError: Если тип данных ответа отличается от ожидаемого.
         APIAnswerWrongDataError: Искомый ключ в ответе отсутствует.
-        NoFilmsError: В ответе нет ни одного фильма.
+        NoContentError: В ответе нет ни одного фильма.
         APIAnswerWrongDataError: Формат года в ответе не соответствует ожидаемому.
 
     Returns:
@@ -219,7 +220,7 @@ def get_film_id(
     if len(films) == 0:
         msg = (f'Поиск ({title}). В ответе API список films пуст.\n'
                f'Проверьте имя файла.')
-        raise NoFilmsError(msg)
+        raise NoContentError(msg)
 
     for idx, film in enumerate(films):
         if is_year_found:
@@ -228,18 +229,24 @@ def get_film_id(
         film_name = film.get('nameRu')
         if film_year is None or film_name is None:
             continue
-        if film_year == year:
-            is_year_found = True
-            msg = (f'Данные о фильме {film["nameRu"]} ({year}) '
-                   f'успешно получены')
-            return is_year_found, str(films[idx]['filmId']), msg
-        elif int(film_year) == int(year) - 1:
-            is_year_found = True
-            msg = (f'Данные о фильме {film["nameRu"]} ({year}) '
-                   f'успешно получены (год выпуска отличается на 1)')
-            return not is_year_found, str(films[idx]['filmId']), msg
+        if year:
+            if film_year == year:
+                is_year_found = True
+                msg = (f'Данные о фильме {film["nameRu"]} ({year}) '
+                    f'успешно получены')
+                return is_year_found, str(films[idx]['filmId']), msg
+            elif int(film_year) == int(year) - 1:
+                is_year_found = True
+                msg = (f'Данные о фильме {film["nameRu"]} ({year}) '
+                    f'успешно получены (год выпуска отличается на 1)')
+                return not is_year_found, str(films[idx]['filmId']), msg
+            else:
+                continue
         else:
-            continue
+            is_year_found = True
+            msg = (f'Данные о фильме {film["nameRu"]} ({year}) '
+                    f'успешно получены\n Поиск без учета года, проверьте правильность')
+            return is_year_found, str(films[idx]['filmId']), msg
             if len(film_year) != 4 or not film_year.isdigit():
                 msg = f'{title} {year} В ответе формат данных года не соответствует ожидаемым {film_year}'
                 raise APIAnswerWrongDataError(msg)
@@ -600,14 +607,54 @@ def main():
         try:
             check_vars()
             for root, dirs, files in os.walk(MEDIA_ROOT_PATH):
-                if TV_SHOWS_FOLDER in dirs:
-                    dirs.remove(TV_SHOWS_FOLDER)
+                continue
+                dirs[:] = [
+                    dir for dir in dirs
+                    if dir != TV_SHOWS_FOLDER
+                    and dir != '.actors'
+                ]
                 files_processed, message = process_folder(root, files)
                 if message:
                     bot_message += f'**** {message}\n\n'
                 new_files += files_processed
             # ----------------------
- 
+            tv_shows_folder = os.path.join(MEDIA_ROOT_PATH, TV_SHOWS_FOLDER)
+            tv_shows = [entry.name for entry in os.scandir(tv_shows_folder)
+                        if entry.is_dir()]
+            print(tv_shows)
+            for show in tv_shows:
+                message = ''
+                show_path = os.path.join(tv_shows_folder, show)
+                nfo_path = os.path.join(show_path, f'{show}.nfo')
+                if not os.path.exists(nfo_path):
+                    title, year = get_film_name_year(show, True)
+                    result_show_id = get_film_id(title)
+                    is_ok_show_id, show_id, msg_id = result_show_id
+                    raw_show_info = get_raw_film_info(show_id)
+                    result_raw_staff_info = get_raw_staff_info(show_id, MAX_ACTORS)
+                    (clean_show_info, posters_urls,
+                        empty_fields) = get_clean_film_info(raw_show_info)
+                    (clean_staff_info, staff_posters,
+                        empty_posters) = get_clean_staff_info(result_raw_staff_info)
+                    is_ok, msg = create_nfo(
+                        clean_show_info, clean_staff_info, show_path, 'tvshow')
+                    if is_ok:
+                        logger.info(f'{title} ({year}): {msg}')
+                    else:
+                        logger.warning(f'{title} ({year}): {msg}')
+                    message += f'\n- {msg}'
+
+                    is_ok, msg = create_posters(
+                        posters_urls, staff_posters, show_path)
+                    if is_ok:
+                        logger.info(f'{title} ({year}): {msg}')
+                    else:
+                        logger.warning(f'{title} ({year}): {msg}')
+                    message += f'\n- {msg}'
+
+                    if not is_ok_show_id:
+                        logger.warning(msg_id) 
+                        message += f'\n- {msg_id}'
             # ----------------------
             if new_files > 0:
                 bot_message += f'*!* Новых фильмов в медиатеке - {new_files}.'
