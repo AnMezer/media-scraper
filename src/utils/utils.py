@@ -19,7 +19,8 @@ import os
 from config.settings import TELEGRAM_CHAT_ID, TMDB_GET_SHOW, TMDB_SEARCH_SHOW, \
     TMDB_TOKEN, YEAR_STAMP, VIDEO_EXT, TV_SHOW_INFO_STRUCTURE, TMDB_IMAGES, \
     TMDB_SHOW_CREDITS, TMDB_GET_SEASON, SEASON_INFO_STRUCTURE, \
-    EPISODE_INFO_STRUCTURE, IMAGES_MAP, FILM_INFO_STRUCTURE, IMAGES_KEYS
+    EPISODE_INFO_STRUCTURE, IMAGES_MAP, FILM_INFO_STRUCTURE, IMAGES_KEYS, \
+    TMDB_SEARCH_MOVIE, TMDB_GET_MOVIE, TMDB_MOVIE_CREDITS, MAX_ACTORS
 from src.main import SPLITTERS
 from src.utils.exceptions import APIAnswerWrongDataError, APIConnectionError, \
     NoContentError, NoYearError, ScraperError, ALotOfContentError, \
@@ -161,6 +162,10 @@ def get_content_by_id(id: int, content_type: str):
     validate_types_from_annotation()
     if content_type == 'tv_show':
         url = f'{TMDB_GET_SHOW}/{id}'
+        expected_keys = list(TV_SHOW_INFO_STRUCTURE.values())
+    else:
+        url = f'{TMDB_GET_MOVIE}/{id}'
+        expected_keys = list(FILM_INFO_STRUCTURE.values())
     request_params = {'url': url,
                       'headers': {'Authorization': f'Bearer {TMDB_TOKEN}'},
                       'params': {'language': 'ru-Ru'}
@@ -168,10 +173,9 @@ def get_content_by_id(id: int, content_type: str):
 
     content = fetch_data('json', **request_params)
     validate_types(content=(content, dict))
-
     # Проверка наличия нужного ключа в ответе
     missing_keys = []
-    for key in ('name', 'id', 'seasons', 'number_of_seasons'):
+    for key in expected_keys:
         if key not in content:
             missing_keys.append(key)
     if missing_keys:
@@ -260,6 +264,8 @@ def get_content(
     validate_types_from_annotation()
     if content_type == 'tv_show':
         url = TMDB_SEARCH_SHOW
+    else:
+        url = TMDB_SEARCH_MOVIE
     request_params = {'url': url,
                       'headers': {'Authorization': f'Bearer {TMDB_TOKEN}'},
                       'params': {'query': content_title,
@@ -480,6 +486,8 @@ def get_main_cast(content_id: str, content_type: str):
     validate_types_from_annotation()
     if content_type == 'tv_show':
         url = TMDB_SHOW_CREDITS.format(content_id)
+    else:
+        url = TMDB_MOVIE_CREDITS.format(content_id)
     request_params = {'url': url,
                       'headers': {'Authorization': f'Bearer {TMDB_TOKEN}'},
                       'params': {
@@ -500,13 +508,17 @@ def get_main_cast(content_id: str, content_type: str):
     request_data: dict = request_cast.json()
     cast = []
     for person in request_data['cast']:
-        person_info = {}
-        person_info['name'] = person.get('name')
-        person_info['role'] = person.get('character')
-        person_info['order'] = person.get('order')
-        person_info['id'] = person.get('id')
-        person_info['photo_url'] = person.get('profile_path')
-        cast.append(person_info)
+        if len(cast) <= MAX_ACTORS:
+            person_info = {}
+            person_info['name'] = person.get('name')
+            person_info['role'] = person.get('character')
+            person_info['order'] = person.get('order')
+            person_info['id'] = person.get('id')
+            person_info['photo_url'] = person.get('profile_path')
+            cast.append(person_info)
+    for idx, person in enumerate(cast[:]):
+        if not person.get('photo_url'):
+            cast.pop(idx)
 
     return cast
 

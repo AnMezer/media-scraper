@@ -17,9 +17,12 @@ ENDPOINT_SEARCH_BY_KEYWORDS = 'https://kinopoiskapiunofficial.tech/api/v2.1/film
 ENDPOINT_DATA_BY_FILM_ID = 'https://kinopoiskapiunofficial.tech/api/v2.2/films'
 ENDPOINT_STAFF_BY_FILM_ID = 'https://kinopoiskapiunofficial.tech/api/v1/staff'
 TMDB_SEARCH_SHOW = 'https://api.themoviedb.org/3/search/tv'
+TMDB_SEARCH_MOVIE = 'https://api.themoviedb.org/3/search/movie'
+TMDB_GET_MOVIE = 'https://api.themoviedb.org/3/movie'
 TMDB_GET_SHOW = 'https://api.themoviedb.org/3/tv'
 TMDB_IMAGES = 'https://image.tmdb.org/t/p/w1280/'
 TMDB_SHOW_CREDITS = 'https://api.themoviedb.org/3/tv/{}/credits'
+TMDB_MOVIE_CREDITS = 'https://api.themoviedb.org/3/movie/{}/credits'
 TMDB_GET_SEASON = 'https://api.themoviedb.org/3/tv/{}/season/{}'
 X_API_KEY = os.getenv('x_api_key')
 TMDB_TOKEN = os.getenv('tmdb_api_token')
@@ -29,20 +32,17 @@ GET_ID_TTL = 60*60*24
 DAY_LIMIT = 500
 SECOND_LIMIT = 4
 FILM_INFO_STRUCTURE = {
-    'title': 'nameRu',
-    'originaltitle': 'nameOriginal',
-    'year': 'year',
-    'plot': 'description',
-    'runtime': 'filmLength',
-    'rating': 'ratingKinopoisk',
-    'votes': 'ratingKinopoiskVoteCount',
-    'mpaa': 'ratingMpaa',
-    'certification': 'ratingMpaa',
+    'title': 'title',
+    'originaltitle': 'original_title',
+    'premiered': 'release_date',
+    'plot': 'overview',
+    'runtime': 'runtime',
+    'rating': 'vote_average',
+    'votes': 'vote_count',
     'genres': 'genres',
-    'countries': 'countries',
-    'kinopoisk_id': 'kinopoiskId',
-    'poster': 'posterUrl',
-    'fanart': 'coverUrl'
+    'TMDB_id': 'id',
+    'poster_path': 'poster_path',
+    'backdrop_path': 'backdrop_path'
 }
 TV_SHOW_INFO_STRUCTURE = {
     'title': 'name',

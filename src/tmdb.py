@@ -144,6 +144,7 @@ class Content:
             self.path = os.path.join(
                 os.path.join(
                     MEDIA_ROOT_PATH, TV_SHOWS_FOLDER), content_folder_name)
+            self.file_name = None
             self.seasons_folders = get_seasons_local_data(self.path)
 
         else:
@@ -151,11 +152,18 @@ class Content:
             self.path = os.path.join(
                 os.path.join(
                     MEDIA_ROOT_PATH, cont_type_folder), content_folder_name)
+            files = [file.name for file in os.scandir(self.path) if
+                     file.name.endswith(VIDEO_EXT)]
+            self.file_name, _ = os.path.splitext(files[0])
             self.seasons_folders = None
 
     def need_nfo_processing(self):
+        if self.content_type == 'tv_show':
+            return not is_nfo_file_exists(
+                self.path, self.content_type, self.folder_name)
+
         return not is_nfo_file_exists(
-            self.path, self.content_type, self.folder_name)
+            self.path, self.content_type, self.file_name)
 
 
 class ToCreate:
@@ -167,6 +175,7 @@ class ToCreate:
         for nfo in self.nfos:
             create_nfo(**nfo)
         for image in self.images:
+            pprint.pprint(image)
             create_image(**image)
         print(f'Создано: nfo - {len(self.nfos)}, images - {len(self.images)}')
 
@@ -181,26 +190,55 @@ def main():
                         content_type = 'movie'
                     case 'Serials':
                         content_type = 'tv_show'
+
                 if root_folder != TV_SHOWS_FOLDER:
-                    continue
-                    movies_path = os.path.join(MEDIA_ROOT_PATH, parent_folder)
-                    movies = [folder.name for folder in os.scandir(
-                                            movies_path) if folder.is_dir()]
-                    for movie in movies:
-                        content_path = os.path.join(movies_path, movie)
-                        content = Content(content_path, content_type)
+                    parent_path = os.path.join(MEDIA_ROOT_PATH, root_folder)
+                    contents_folders = [folder.name for folder in
+                                        os.scandir(parent_path)
+                                        if folder.is_dir()]
+                    for content_folder in contents_folders:
+                        content = Content(content_folder, content_type)
                         if content.need_nfo_processing():
-                            content.title, content.year = (
-                                get_content_name_year(movie, content_type))
-                            print(content.title, content.year)
+                            content.title, content.year = get_content_name_year(
+                                content.folder_name, content.content_type)
+                            raw_content = get_content(content.title, content.year, content_type, content.path)
+                            content.data = get_clean_info(raw_content,
+                                                          content.content_type, None)
+                            to_create.nfos.append({'content': content.data,
+                                                   'path': content.path,
+                                                   'content_type': content_type,
+                                                   'file_name': content.file_name})
+                            # Добавляем актеров в content, добавляем фото для загрузки
+
+                            staff = get_main_cast(
+                                str(content.data['TMDB_id']), content_type)
+                            content.data['actors'] = []
+                            for person in staff:
+                                content.data['actors'].append(person)
+                                actors_path = os.path.join(content.path,
+                                                           '.actors')
+                                person_name = person['name'].replace(' ', '_')
+                                to_create.images.append({
+                                    'image_name': person_name,
+                                    'url_path': person['photo_url'],
+                                    'path': actors_path})
+
+                            # Добавляем главные постер и задник в загрузки
+                            for key in ('poster_path', 'backdrop_path'):
+                                image_name = IMAGES_MAP.get(key)
+                                to_create.images.append({
+                                    'image_name': image_name,
+                                    'url_path': content.data[key],
+                                    'path': content.path})
+                            pprint.pprint(content.data)
+                            break
                     continue
                 # Получаем список произведений
-                tv_shows_path = os.path.join(MEDIA_ROOT_PATH, root_folder)
-                tv_shows_folders = [tv_show.name for tv_show in os.scandir(
-                                                tv_shows_path)
-                                    if tv_show.is_dir()]
-                for tv_show_folder in tv_shows_folders:
-                    content = Content(tv_show_folder, content_type, '', '')
+                parent_path = os.path.join(MEDIA_ROOT_PATH, root_folder)
+                contents_folders = [folder.name for folder in os.scandir(parent_path)
+                                    if folder.is_dir()]
+                for content_folder in contents_folders:
+                    content = Content(content_folder, content_type)
                     if content.need_nfo_processing():
                         content.title, content.year = get_content_name_year(
                             content.folder_name, content.content_type)
