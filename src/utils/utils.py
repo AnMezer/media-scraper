@@ -337,7 +337,7 @@ def get_clean_info(
     Args:
         raw_content: Исходная информация из API
         content_type: movie, episode или tv_show
-        season_numbers: список с номерами имеющихся локально сезонов
+        season_numbers: для tv_show список с номерами имеющихся локально сезонов
     Returns:
         content: Словарь с готовыми для сохранения данными.
     """
@@ -536,18 +536,3 @@ def get_season_info(season_num, id):
         return episodes_result
     raise NoContentError(f'TMDB_id - {id}:'
                          f'В ответе API нет информации о сезонах ')
-    season_info = {}
-
-    for tag, tag_info in SEASON_INFO_STRUCTURE.items():
-        if tag != 'episodes':
-            season_info[tag] = request_data.get(tag_info)
-    season_info['episodes'] = {}
-    for episode in episodes:
-        episode_info = {episode['episode_number']: {}}
-        for tag, tag_info in EPISODE_INFO_STRUCTURE.items():
-            if tag == 'showtitle':
-                episode_info[episode['episode_number']]['showtitle'] = showtitle
-            else:
-                episode_info[episode['episode_number']][tag] = episode.get(tag_info)
-        season_info['episodes'][episode['episode_number']] = episode_info[episode['episode_number']]
-    return season_info
