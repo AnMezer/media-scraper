@@ -18,7 +18,7 @@ ENDPOINT_DATA_BY_FILM_ID = 'https://kinopoiskapiunofficial.tech/api/v2.2/films'
 ENDPOINT_STAFF_BY_FILM_ID = 'https://kinopoiskapiunofficial.tech/api/v1/staff'
 TMDB_SEARCH_SHOW = 'https://api.themoviedb.org/3/search/tv'
 TMDB_GET_SHOW = 'https://api.themoviedb.org/3/tv'
-TMDB_IMAGES = 'https://image.tmdb.org/t/p/w1280'
+TMDB_IMAGES = 'https://image.tmdb.org/t/p/w1280/'
 TMDB_SHOW_CREDITS = 'https://api.themoviedb.org/3/tv/{}/credits'
 TMDB_GET_SEASON = 'https://api.themoviedb.org/3/tv/{}/season/{}'
 X_API_KEY = os.getenv('x_api_key')
@@ -56,9 +56,9 @@ TV_SHOW_INFO_STRUCTURE = {
     'countries': 'production_countries',
     'TMDB_id': 'id',
     'tagline': 'tagline',
-    'poster': 'poster_path',
-    'fanart': 'backdrop_path',
-    'seasons': 'seasons'
+    'seasons': 'seasons',
+    'poster_path': 'poster_path',
+    'backdrop_path': 'backdrop_path'
 
 
 }
@@ -71,12 +71,18 @@ SEASON_INFO_STRUCTURE = {
     'episodes': {}
    }
 EPISODE_INFO_STRUCTURE = {
-        'showtitle': '',
+        'showtitle': 'showtitle',
         'title': 'name',
         'season': 'season_number',
         'episode': 'episode_number',
         'plot': 'overview',
         'aired': 'air_date',
         'TMDB_id': 'id',
+        'episode_poster': 'still_path'
     }
+IMAGES_MAP = {'poster_path': 'poster',
+              'backdrop_path': 'fanart',
+              'profile_path': 'photo'}
+IMAGES_KEYS = ('poster_path', 'backdrop_path', 'profile_path',
+               'photo_url', 'episode_poster')
 # HEADERS = {'x-api-key': os.getenv('x_api_key')}

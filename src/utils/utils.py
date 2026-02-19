@@ -3,10 +3,13 @@ from inspect import stack
 import pprint
 import re
 from urllib import request
+from urllib.parse import urljoin
+
 #from xml.etree.ElementTree import Element, SubElement
 from lxml import etree
 
 import requests
+from requests import Response, JSONDecodeError
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
 from requests.exceptions import RequestException
@@ -16,12 +19,13 @@ import os
 from config.settings import TELEGRAM_CHAT_ID, TMDB_GET_SHOW, TMDB_SEARCH_SHOW, \
     TMDB_TOKEN, YEAR_STAMP, VIDEO_EXT, TV_SHOW_INFO_STRUCTURE, TMDB_IMAGES, \
     TMDB_SHOW_CREDITS, TMDB_GET_SEASON, SEASON_INFO_STRUCTURE, \
-    EPISODE_INFO_STRUCTURE
+    EPISODE_INFO_STRUCTURE, IMAGES_MAP, FILM_INFO_STRUCTURE, IMAGES_KEYS
 from src.main import SPLITTERS
 from src.utils.exceptions import APIAnswerWrongDataError, APIConnectionError, \
-    NoContentError, NoYearError, ScraperError, ALotOfContentError
+    NoContentError, NoYearError, ScraperError, ALotOfContentError, \
+    ResponseProcessingError
 from src.utils.validators import check_request_status, validate_types, validate_types_from_annotation
-from utils.exceptions import NfoCreateError
+from utils.exceptions import NfoCreateError, CreateImageError
 
 logger = logging.getLogger(f'Media scraper.{__name__}')
 
@@ -44,6 +48,48 @@ def send_message(bot: TeleBot, message: str) -> bool:
     return True
 
 
+def fetch_data(data_type: str, **request_params) -> dict | bytes| None:
+    """
+    Отправляет GET запрос к API, выполняет первичное преобразование ответа
+    в зависимости от параметра type.
+    Args:
+        data_type: Необходимый тип данных (json или content).
+        **request_params: Параметры запроса.
+    Raises:
+        RequestException: Ошибка при получении ответа.
+        UnauthorisedError: Ошибка авторизации.
+        RequestLimitExceededError: Превышен дневной или общий лимит на запросы к API.
+        TooManyRequestsError: Превышен секундный лимит на запросы к API.
+        APIConnectionError: Код ответа отличен от ожидаемых.
+        JSONDecodeError: Не удалось распарсить ответ API
+    Returns:
+        Ответ API приведенный к нужному типу.
+        None, если 404.
+    """
+    expected_data_types = ('content', 'json')
+    if data_type not in expected_data_types:
+        raise ValueError(f'Неподдерживаемый тип данных. '
+                         f'Ожидаются {", ".join(expected_data_types)}')
+    try:
+        response = requests.get(**request_params)
+    except RequestException as e:
+        error_msg = (
+            f'Ошибка при получении ответа от API {request_params}: {e}')
+        raise APIConnectionError(error_msg)
+    status_code = response.status_code
+    check_request_status(status_code)
+    if status_code == HTTPStatus.NOT_FOUND:
+        return None
+    try:
+        match data_type:
+            case 'content':
+                return response.content
+            case 'json':
+                return response.json()
+    except JSONDecodeError as e:
+        raise ResponseProcessingError(f'Ошибка обработки ответа API {e}')
+
+
 def is_nfo_file_exists(
         path: str, content_type: str, content_name: str) -> bool:
     """Проверяет наличие nfo-файла
@@ -53,11 +99,11 @@ def is_nfo_file_exists(
         content_type: Тип контента(tv_show, episode или movie)
         content_name: Название контента,
             - для сериалов имя корневой папки сериала.
-            - для фильмов имя фидеофайла без расширения
+            - для фильмов имя видеофайла без расширения
 
 
     Returns:
-        True, есди nfo-файл существует, иначе False
+        True, если nfo-файл существует, иначе False
     """
 
     validate_types_from_annotation()
@@ -120,19 +166,7 @@ def get_content_by_id(id: int, content_type: str):
                       'params': {'language': 'ru-Ru'}
                       }
 
-    # Проверка статуса ответа API
-    try:
-        request_content = requests.get(**request_params)
-    except RequestException as e:
-        error_msg = (
-            f'Ошибка при получении ответа от API {request_params}: {e}')
-        raise APIConnectionError(error_msg)
-    status_code = request_content.status_code
-    check_request_status(status_code)
-    if status_code == HTTPStatus.NOT_FOUND:
-        return None
-
-    content: dict = request_content.json()
+    content = fetch_data('json', **request_params)
     validate_types(content=(content, dict))
 
     # Проверка наличия нужного ключа в ответе
@@ -233,27 +267,15 @@ def get_content(
                                  'year': content_year if content_year
                                           else None}
                       }
-    # Проверка статуса ответа API
-    try:
-        request_search = requests.get(**request_params)
-    except RequestException as e:
-        error_msg = (
-            f'Ошибка при получении ответа от API {request_params}: {e}')
-        raise APIConnectionError(error_msg)
-    status_code = request_search.status_code
-    check_request_status(status_code)
-    if status_code == HTTPStatus.NOT_FOUND:
-        return None
-
-    request_data: dict = request_search.json()
-    validate_types(request_data=(request_data, dict))
+    content = fetch_data('json', **request_params)
+    validate_types(content=(content, dict))
 
     # Проверка наличия нужного ключа в ответе
-    if 'results' not in request_data:
+    if 'results' not in content:
         msg = 'Ключ results отсутствует в ответе API'
         raise APIAnswerWrongDataError(msg)
 
-    results = request_data.get('results')
+    results = content.get('results')
     if results is None:
         return None
     if len(results) == 0:
@@ -307,35 +329,56 @@ def get_content(
             return candidates[0]
     raise ScraperError('Ошибка выполнения функции get_content')
 
-def get_clean_info(raw_info: dict):
+def get_clean_info(
+        raw_content: dict, content_type: str, season_numbers: list |  None):
     """
-    Разделяет исходную информацию на два словаря: данные и изображения
+    Удаляет из ответа неиспользуемые данные.
+    Для сезонов заменяет тип данных на словарь, где номер сезона ключ
     Args:
-        raw_info: Словарь с сырыми данными
-
+        raw_content: Исходная информация из API
+        content_type: movie, episode или tv_show
+        season_numbers: для tv_show список с номерами имеющихся локально сезонов
     Returns:
-        content_info - данные для сохранения в nfo файл
-        images - ссылки на изображения
+        content: Словарь с готовыми для сохранения данными.
     """
-    images = {}
-    content_info = {}
     validate_types_from_annotation()
-    for key, value in TV_SHOW_INFO_STRUCTURE.items():
-        clean_value = raw_info.get(value)
-        if value in ('poster_path', 'backdrop_path'):
-            images[key] = f'{TMDB_IMAGES}/{clean_value}'
-        else:
-            content_info[key] = clean_value
-    content_info['actors'] = []
-    return content_info, images
+    try:
+        expected_content_types = ('tv_show', 'episode', 'movie')
+        if content_type not in expected_content_types:
+            raise ValueError(f'Неподдерживаемый тип контента. '
+                             f'Ожидаются {", ".join(expected_content_types)}')
+        if content_type == 'tv_show':
+            key_map = TV_SHOW_INFO_STRUCTURE
+        if content_type == 'episode':
+            key_map = EPISODE_INFO_STRUCTURE
+        if content_type == 'movie':
+            key_map = FILM_INFO_STRUCTURE
+        content = {}
+        for tag, content_tag in key_map.items():
+            if tag != 'seasons':
+                content[tag] = raw_content.get(content_tag)
+            else:
+                seasons = {}
+                for season in raw_content.get(tag):
+                    season_num_api = int(season.get('season_number'))
+                    if int(season_num_api) in season_numbers:
+                        season['showtitle'] = content.get('title')
+                        seasons[season_num_api] = season
+                content[tag] = seasons
+        return content
+
+    except Exception as e:
+        error_msg = (f'Ошибка при очистке ответа API для : {content_type} '
+                     f'{type(e).__name__} - {str(e)}')
+        raise NfoCreateError(error_msg) from e
 
 def create_nfo(
-        content_info: dict, path: str, content_type: str,
+        content: dict, path: str, content_type: str,
         file_name: str | None = None):
     """
-    Создает nfo файл.
+    Создает nfo файл из исходного словаря.
     Args:
-        content_info: Словарь с данными для сохранения в файле.
+        content: Словарь с данными для сохранения в файле.
         path: папка для создания файла.
         content_type: movie или tv_show, episode.
         file_name: имя nfo файла, только для фильмов и эпизодов.
@@ -344,57 +387,68 @@ def create_nfo(
 
     """
     validate_types_from_annotation()
-    keys_to_skip = ('photo_url', 'id', 'seasons')
+    expected_content_types = ('tv_show', 'episode', 'movie')
+    if content_type not in expected_content_types:
+        raise ValueError(f'Неподдерживаемый тип контента. '
+                         f'Ожидаются {", ".join(expected_content_types)}')
     try:
         if content_type == 'tv_show':
             file_name = 'tvshow.nfo'
             root_name = 'tvshow'
-        elif content_type == 'episode':
+        if content_type == 'episode':
             file_name = f'{file_name}.nfo'
             root_name = 'episodedetails'
-        else:
+        if content_type == 'movie':
             file_name = f'{file_name}.nfo'
             root_name = 'movie'
+
         nfo_path = os.path.join(path, file_name)
         root = etree.Element(root_name)
-        for tag, tag_value in content_info.items():
-            if tag == 'genres':
-                for genre in tag_value:
-                    tag = etree.SubElement(root, 'genre')
-                    tag.text = str(genre['name'])
-            elif tag == 'countries':
-                for country in tag_value:
-                    tag = etree.SubElement(root, 'country')
-                    tag.text = str(country['name'])
+        for tag, content_key in content.items():
+            # Обработка множественных тэгов
+            if tag in ('genres', 'countries'):
+                for elem in content_key:
+                    elem_tag = etree.SubElement(root, tag)
+                    elem_tag.text = str(elem.get('name'))
+
+            # Обработка тэгов с вложенностью
             elif tag == 'actors':
-                for actor in tag_value:
-                    actor_elem = etree.SubElement(root, 'actor')
+                for actor in content_key:
+                    tag_actor = etree.SubElement(root, 'actor')
                     for key, value in actor.items():
-                        if key not in keys_to_skip:
-                            sub_tag = etree.SubElement(actor_elem, key)
-                            sub_tag.text = str(value)
+                        if key not in IMAGES_KEYS:
+                            actor_elem = etree.SubElement(tag_actor, key)
+                            actor_elem.text = str(value)
+            # Обработка инфо о сезонах
+            elif tag == 'seasons':
+                for s_num, s_content in content_key.items():
+                    season_plot = etree.SubElement(root, 'seasonplot')
+                    season_plot.set('number', str(s_num))
+                    season_plot.text = str(s_content.get('overview'))
+
+            # Обработка остальных тэгов, пропускаем изображения
             else:
-                if tag not in keys_to_skip:
-                    tag = etree.SubElement(root, tag)
-                    tag.text = str(tag_value)
-        if content_type == 'tv_show' and 'seasons' in content_info:
-            for season in content_info['seasons']:
-                season_plot = etree.SubElement(root, 'seasonplot')
-                season_plot.set('number', str(season['season_number']))
-                season_plot.text = str(season.get('overview'))
+                if tag not in IMAGES_KEYS:
+                    elem = etree.SubElement(root, tag)
+                    elem.text = str(content_key)
+
         rough_xml = etree.tostring(root, encoding='utf-8',
                                    xml_declaration=True, pretty_print=True)
         final_xml = rough_xml.decode('utf-8')
         with open(nfo_path, 'w', encoding='utf-8') as f:
             f.write(final_xml)
-    except Exception as e:
-        raise NfoCreateError(e)
 
-def create_images(images: dict, path):
+    except Exception as e:
+        error_msg = (f'Ошибка при создании nfo для: {content_type} в {path}:'
+                     f'{type(e).__name__} - {str(e)}')
+        raise NfoCreateError(error_msg) from e
+
+def create_image(image_name: str, url_path: str, path:str):
     """
     Загружает и создает изображения.
     Args:
-        images: Словарь {название файла: ссылка}
+        image_name: Имя, с которым следует создать файл
+        url_path: последний сегмент ссылки на изображения (/3851982849458.jpg)
         path: Адрес папки для сохранения
 
     Returns:
@@ -402,12 +456,16 @@ def create_images(images: dict, path):
     """
     validate_types_from_annotation()
     os.makedirs(path, exist_ok=True)
-    for image_type, url in images.items():
-        image = requests.get(url=url)
-        file_name = f'{image_type}.jpg'
-        file_path = os.path.join(path, file_name)
+    url = f'{TMDB_IMAGES}{url_path}'
+    image = fetch_data('content', url=url)
+    file_name = f'{image_name}.jpg'
+    file_path = os.path.join(path, file_name)
+    try:
         with open(file_path, 'wb') as f:
-            f.write(image.content)
+            f.write(image)
+    except (PermissionError, OSError, IsADirectoryError) as e:
+        raise CreateImageError(
+            f'Ошибка при сохранении изображения {file_path}: {e}')
 
 def get_main_cast(content_id: str, content_type: str):
     """
@@ -447,62 +505,34 @@ def get_main_cast(content_id: str, content_type: str):
         person_info['role'] = person.get('character')
         person_info['order'] = person.get('order')
         person_info['id'] = person.get('id')
-        raw_url = person.get('profile_path')
-        if raw_url is not None:
-            person_info['photo_url'] = f'{TMDB_IMAGES}{raw_url}'
-        full_info = True
-        for tag in person_info:
-            if tag is None:
-                full_info = False
-        if full_info:
-            cast.append(person_info)
-        else:
-            continue
+        person_info['photo_url'] = person.get('profile_path')
+        cast.append(person_info)
+
     return cast
 
-def get_season_info(season_num, id, showtitle):
+def get_season_info(season_num, id):
     """
     Возвращает словарь с информацией о сезоне.
     Args:
         season_num: Номер сезона
         id: id сериала
-        showtitle: Название сериала
     Returns:
         Словарь с общей информацией о сезоне и списком с информацией о сериях.
     """
-    validate_types_from_annotation()
     request_params = {'url': TMDB_GET_SEASON.format(id, season_num),
                       'headers': {'Authorization': f'Bearer {TMDB_TOKEN}'},
                       'params': {'language': 'ru-Ru'}
                       }
 
     # Проверка статуса ответа API
-    try:
-        request_season = requests.get(**request_params)
-    except RequestException as e:
-        error_msg = (
-            f'Ошибка при получении ответа от API {request_params}: {e}')
-        raise APIConnectionError(error_msg)
-    status_code = request_season.status_code
-    check_request_status(status_code)
-    if status_code == HTTPStatus.NOT_FOUND:
-        return None
-
-    request_data: dict = request_season.json()
-    validate_types(request_data=(request_data, dict))
-    episodes = request_data['episodes']
-    season_info = {}
-
-    for tag, tag_info in SEASON_INFO_STRUCTURE.items():
-        if tag != 'episodes':
-            season_info[tag] = request_data.get(tag_info)
-    season_info['episodes'] = {}
-    for episode in episodes:
-        episode_info = {episode['episode_number']: {}}
-        for tag, tag_info in EPISODE_INFO_STRUCTURE.items():
-            if tag == 'showtitle':
-                episode_info[episode['episode_number']]['showtitle'] = showtitle
-            else:
-                episode_info[episode['episode_number']][tag] = episode.get(tag_info)
-        season_info['episodes'][episode['episode_number']] = episode_info[episode['episode_number']]
-    return season_info
+    season_data = fetch_data('json', **request_params)
+    validate_types(request_data=(season_data, dict))
+    episodes_data = season_data.get('episodes')
+    if episodes_data and len(episodes_data) > 0:
+        episodes_result = {}
+        for episode in episodes_data:
+            ep_number = episode['episode_number']
+            episodes_result[ep_number] = episode
+        return episodes_result
+    raise NoContentError(f'TMDB_id - {id}:'
+                         f'В ответе API нет информации о сезонах ')
