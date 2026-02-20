@@ -202,8 +202,8 @@ def eliminate_uncertainty(
     seasons_local = [season.name for season in os.scandir(path)
                      if season.is_dir() and re.search(r'(\d{1,2})$',
                                                       season.name)]
-    # Получаем информацию о сериалах - кандидатах
     candidates = []
+    # Получаем информацию о сериалах - кандидатах
     for show_id in uncertainty_content_ids:
         raw_candidate = get_content_by_id(show_id, content_type='tv_show')
         # Если у кандидата сезонов столько же или больше, чем локально,
@@ -262,6 +262,7 @@ def get_content(
         - None если ничего не найдено
     """
     validate_types_from_annotation()
+
     if content_type == 'tv_show':
         url = TMDB_SEARCH_SHOW
     else:
@@ -282,8 +283,6 @@ def get_content(
         raise APIAnswerWrongDataError(msg)
 
     results = content.get('results')
-    if results is None:
-        return None
     if len(results) == 0:
         raise NoContentError()
     # Если кандидат один, берем его id
@@ -301,7 +300,6 @@ def get_content(
         except (KeyError, ValueError):
             error_msg = f'Некорректный id в ответе API: {content_id}'
             raise APIAnswerWrongDataError(error_msg)
-
         content = get_content_by_id(results[0]['id'], content_type)
         if content is None:
             return None
@@ -309,6 +307,15 @@ def get_content(
 
     # Если кандидатов несколько, получаем список с их id
     if len(results) > 1:
+        if content_type != 'tv_show':
+            # TODO: добавить логику фильтрации лишних фильмов
+            if content_title == 'Tomb Raider Лара Крофт':
+                content = get_content_by_id(338970, content_type)
+                return content
+            elif content_title == 'Van Helsing':
+                content = get_content_by_id(7131, content_type)
+                return content
+            # --------------------------------
         uncertainty_content_ids = []
         for result in results:
             if 'id' not in result:
@@ -322,7 +329,6 @@ def get_content(
 
         # Отфильтровываем лишних и получаем инфо об оставшихся
         candidates = eliminate_uncertainty(uncertainty_content_ids, path)
-
         if len(candidates) > 1:
             problem_items = [f'{item["title"]}: {item["TMDB_id"]}' for item in
                              candidates]

@@ -175,7 +175,6 @@ class ToCreate:
         for nfo in self.nfos:
             create_nfo(**nfo)
         for image in self.images:
-            pprint.pprint(image)
             create_image(**image)
         print(f'Создано: nfo - {len(self.nfos)}, images - {len(self.images)}')
 
@@ -186,71 +185,55 @@ def main():
             to_create = ToCreate()
             for root_folder in (MOVIES_FOLDER, CARTOONS_FOLDER, TV_SHOWS_FOLDER):
                 match root_folder:
-                    case 'Cartoons' | 'Movies':
+                    case 'Cartoons' | 'Movies'| 'Movies_test':
                         content_type = 'movie'
                     case 'Serials':
                         content_type = 'tv_show'
-
-                if root_folder != TV_SHOWS_FOLDER:
-                    parent_path = os.path.join(MEDIA_ROOT_PATH, root_folder)
-                    contents_folders = [folder.name for folder in
-                                        os.scandir(parent_path)
-                                        if folder.is_dir()]
-                    for content_folder in contents_folders:
-                        content = Content(content_folder, content_type)
-                        if content.need_nfo_processing():
-                            content.title, content.year = get_content_name_year(
-                                content.folder_name, content.content_type)
-                            raw_content = get_content(content.title, content.year, content_type, content.path)
-                            content.data = get_clean_info(raw_content,
-                                                          content.content_type, None)
-                            to_create.nfos.append({'content': content.data,
-                                                   'path': content.path,
-                                                   'content_type': content_type,
-                                                   'file_name': content.file_name})
-                            # Добавляем актеров в content, добавляем фото для загрузки
-
-                            staff = get_main_cast(
-                                str(content.data['TMDB_id']), content_type)
-                            content.data['actors'] = []
-                            for person in staff:
-                                content.data['actors'].append(person)
-                                actors_path = os.path.join(content.path,
-                                                           '.actors')
-                                person_name = person['name'].replace(' ', '_')
-                                to_create.images.append({
-                                    'image_name': person_name,
-                                    'url_path': person['photo_url'],
-                                    'path': actors_path})
-
-                            # Добавляем главные постер и задник в загрузки
-                            for key in ('poster_path', 'backdrop_path'):
-                                image_name = IMAGES_MAP.get(key)
-                                to_create.images.append({
-                                    'image_name': image_name,
-                                    'url_path': content.data[key],
-                                    'path': content.path})
-                            pprint.pprint(content.data)
-                            break
-                    continue
-                # Получаем список произведений
                 parent_path = os.path.join(MEDIA_ROOT_PATH, root_folder)
-                contents_folders = [folder.name for folder in os.scandir(parent_path)
+                contents_folders = [folder.name for folder in
+                                    os.scandir(parent_path)
                                     if folder.is_dir()]
+
                 for content_folder in contents_folders:
                     content = Content(content_folder, content_type)
                     if content.need_nfo_processing():
-                        content.title, content.year = get_content_name_year(
+                        if content.content_type == 'tv_show':
+                            content.title, content.year = get_content_name_year(
                             content.folder_name, content.content_type)
-                        raw_content = get_content(
-                            content.title, content.year, content_type, content.path)
-                        content.data = get_clean_info(
-                            raw_content, content_type,list(content.seasons_folders.keys()))
+                        else:
+                            content.title, content.year = get_content_name_year(
+                                content.file_name, content.content_type)
+                        print(f'{content.title}--{content.year}--'
+                              f'{content_type}--{content.path}')
+                        raw_content = get_content(content.title, content.year, content_type, content.path)
+                        print('+++++++++++++++++')
+
+                        if content.content_type == 'tv_show':
+                            content.data = get_clean_info(raw_content, content_type,list(content.seasons_folders.keys()))
+                            file_name = None
+                            # Добавляем информацию о сериях в сезоны
+                            seasons = content.data['seasons']
+                            for season_num, season_data in seasons.items():
+                                episodes = seasons[season_num]['episodes'] = {}
+                                raw_episodes_data = get_season_info(
+                                    season_num, content.data['TMDB_id'])
+                                for raw_episode_data in raw_episodes_data.values():
+                                    episode_data = get_clean_info(
+                                        raw_episode_data, 'episode', None)
+                                    episode_data['showtitle'] = content.data[
+                                        'title']
+                                    episodes[
+                                        episode_data['episode']] = episode_data
+                            process_seasons(content, to_create)
+                        else:
+                            content.data = get_clean_info(raw_content, content_type, None)
+                            file_name = content.file_name
                         to_create.nfos.append({'content': content.data,
                                                'path': content.path,
                                                'content_type': content_type,
-                                               'file_name': None})
-                        # Добавляем актеров в content, добавляем фото для загрузки
+                                               'file_name': file_name})
+
+                        # Добавляем актеров в content, фото для загрузки
                         staff = get_main_cast(
                             str(content.data['TMDB_id']), content_type)
                         content.data['actors'] = []
@@ -263,17 +246,6 @@ def main():
                                                     'url_path': person['photo_url'],
                                                     'path': actors_path})
 
-                        # Добавляем информацию о сериях в сезоны
-                        seasons = content.data['seasons']
-                        for season_num, season_data in seasons.items():
-                            episodes = seasons[season_num]['episodes'] = {}
-                            raw_episodes_data = get_season_info(
-                                                season_num, content.data['TMDB_id'])
-                            for raw_episode_data in raw_episodes_data.values():
-                                episode_data = get_clean_info(
-                                                raw_episode_data, 'episode', None)
-                                episode_data['showtitle'] = content.data['title']
-                                episodes[episode_data['episode']] = episode_data
 
                         # Добавляем главные постер и задник в загрузки
                         for key in ('poster_path', 'backdrop_path'):
@@ -282,10 +254,7 @@ def main():
                                 'image_name': image_name,
                                 'url_path': content.data[key],
                                 'path': content.path})
-
-                        process_seasons(content, to_create)
-
-                to_create.create()
+            to_create.create()
 
         except Exception as e:
             error_message = f'Сбой в работе программы:\n{type(e).__name__} {e}'
