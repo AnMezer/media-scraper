@@ -71,7 +71,7 @@ def get_seasons_local_data(show_path: str) -> dict:
     """
     seasons_folders = [
         season.name for season in os.scandir(show_path)
-        if season.is_dir() and re.search(r'(\d{1,2})$', season.name)]
+        if season.is_dir() and re.search(r'(\d{1,2})', season.name)]
 
     # Собираем словарь {№_сезона: папка_сезона}
     seasons_local = {}
@@ -101,10 +101,25 @@ def process_seasons(content: 'Content', to_create: 'ToCreate'):
         for file in files:
             file_name, ext = os.path.splitext(file)
             if ext in VIDEO_EXT:
-                match = re.search(
-                    r'S(\d{1,2})E(\d{1,2})', file_name)
+                match = re.search(r'S?(\d{1,2})[Eex-](\d{1,2})', file_name, re.IGNORECASE)
                 if match:
                     episode_num = int(match.group(2))
+
+                    # Приведение к формату S01E01
+                    episode_index = file_name[match.start():match.end()]
+                    if not re.fullmatch(r'S(\d{1,2})E(\d{1,2})', episode_index):
+                        s_num = (season_num if len(str(season_num)) > 1
+                                 else f'0{season_num}')
+                        ep_num = (episode_num if len(str(episode_num)) > 1
+                                  else f'0{episode_num}')
+                        ok_episode_index = f'S{s_num}E{ep_num}'
+                        ok_file = file.replace(episode_index, ok_episode_index)
+                        old_path = os.path.join(season_path, file)
+                        new_path = os.path.join(season_path, ok_file)
+                        os.rename(old_path, new_path)
+                        file_name, _ = os.path.splitext(ok_file)
+                    # ----------------------------
+
                     if not is_nfo_file_exists(
                             season_path, 'episode', file_name):
                         episode_data = \
@@ -179,6 +194,7 @@ class ToCreate:
         print(f'Создано: nfo - {len(self.nfos)}, images - {len(self.images)}')
 
 def main():
+    time_start = datetime.now()
     while True:
         latest_error_msg = ''
         try:
@@ -203,11 +219,7 @@ def main():
                         else:
                             content.title, content.year = get_content_name_year(
                                 content.file_name, content.content_type)
-                        print(f'{content.title}--{content.year}--'
-                              f'{content_type}--{content.path}')
                         raw_content = get_content(content.title, content.year, content_type, content.path)
-                        print('+++++++++++++++++')
-
                         if content.content_type == 'tv_show':
                             content.data = get_clean_info(raw_content, content_type,list(content.seasons_folders.keys()))
                             file_name = None
@@ -265,6 +277,8 @@ def main():
                     latest_error_msg = error_message
                 except Exception:
                     logger.error('Ошибка при отправке сообщения')
+        work_time = datetime.now() - time_start
+        print(f'Время выполнения {work_time}')
         break
 
 if __name__ == '__main__':

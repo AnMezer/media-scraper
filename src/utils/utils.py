@@ -170,7 +170,6 @@ def get_content_by_id(id: int, content_type: str):
                       'headers': {'Authorization': f'Bearer {TMDB_TOKEN}'},
                       'params': {'language': 'ru-Ru'}
                       }
-
     content = fetch_data('json', **request_params)
     validate_types(content=(content, dict))
     # Проверка наличия нужного ключа в ответе
@@ -200,7 +199,7 @@ def eliminate_uncertainty(
     validate_types_from_annotation()
     # Получаем информацию о кол-ве сезонов сохраненных локально
     seasons_local = [season.name for season in os.scandir(path)
-                     if season.is_dir() and re.search(r'(\d{1,2})$',
+                     if season.is_dir() and re.search(r'(\d{1,2})',
                                                       season.name)]
     candidates = []
     # Получаем информацию о сериалах - кандидатах
@@ -275,6 +274,7 @@ def get_content(
                                           else None}
                       }
     content = fetch_data('json', **request_params)
+
     validate_types(content=(content, dict))
 
     # Проверка наличия нужного ключа в ответе
@@ -301,6 +301,7 @@ def get_content(
             error_msg = f'Некорректный id в ответе API: {content_id}'
             raise APIAnswerWrongDataError(error_msg)
         content = get_content_by_id(results[0]['id'], content_type)
+
         if content is None:
             return None
         return content
@@ -315,6 +316,10 @@ def get_content(
             elif content_title == 'Van Helsing':
                 content = get_content_by_id(7131, content_type)
                 return content
+            elif content_title == 'In Time':
+                content = get_content_by_id(49530, content_type)
+                return content
+
             # --------------------------------
         uncertainty_content_ids = []
         for result in results:
@@ -329,8 +334,10 @@ def get_content(
 
         # Отфильтровываем лишних и получаем инфо об оставшихся
         candidates = eliminate_uncertainty(uncertainty_content_ids, path)
+        # TODO: Добавить создание файла с кандидатами, если не удалось
+        #  оставить 1
         if len(candidates) > 1:
-            problem_items = [f'{item["title"]}: {item["TMDB_id"]}' for item in
+            problem_items = [f'{item["name"]}: {item["id"]}' for item in
                              candidates]
             error_msg = (f'Для {content_title} проверьте имя '
                          f'файла/папки. Не удалось идентифицировать '
