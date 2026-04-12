@@ -85,6 +85,7 @@ def process_seasons(content: 'Content', to_create: 'ToCreate'):
     # Добавляем постеры сезонов в загрузки
     for season_num, season_data in (
             content.data['seasons'].items()):
+        print(f'Обработка сезона № {season_num}')
         s_num = (f'0{season_num}' if len(str(season_num)) < 2
                  else str(season_num))
         image_name = f'season{s_num}-poster'
@@ -92,22 +93,29 @@ def process_seasons(content: 'Content', to_create: 'ToCreate'):
             'image_name': image_name,
             'url_path': season_data['poster_path'],
             'path': content.path})
-
         # Получаем список серий
         season_path = os.path.join(
             content.path, content.seasons_folders[season_num])
         files = [file.name for file in os.scandir(season_path)
                  if file.is_file()]
         for file in files:
+            print(f'Серия {file}')
             file_name, ext = os.path.splitext(file)
             if ext in VIDEO_EXT:
-                match = re.search(r'S?(\d{1,2})[Eex-](\d{1,2})', file_name, re.IGNORECASE)
+                # TODO: Обновить паттерн
+                match = re.search(r'S?(\d{1,2})[Eex\.\-_](\d{1,2})', file_name, re.IGNORECASE)
                 if match:
                     episode_num = int(match.group(2))
+                else:
+                    match = re.search(r'(\d{1,2})', file_name)
+                    if match:
+                        episode_num = int(match.group(1))
+                if match:
 
                     # Приведение к формату S01E01
                     episode_index = file_name[match.start():match.end()]
-                    if not re.fullmatch(r'S(\d{1,2})E(\d{1,2})', episode_index):
+                    if not re.fullmatch(r'[Ss](\d{1,2})[Ee](\d{1,2})',
+                                        episode_index):
                         s_num = (season_num if len(str(season_num)) > 1
                                  else f'0{season_num}')
                         ep_num = (episode_num if len(str(episode_num)) > 1
@@ -121,21 +129,29 @@ def process_seasons(content: 'Content', to_create: 'ToCreate'):
                     # ----------------------------
 
                     if not is_nfo_file_exists(
-                            season_path, 'episode', file_name):
-                        episode_data = \
-                        content.data['seasons'][season_num]['episodes'][
-                            episode_num]
-                        poster_name = f'{file_name}-thumb'
-                        to_create.nfos.append({
-                            'content': episode_data,
-                            'path': season_path,
-                            'content_type': 'episode',
-                            'file_name': file_name
-                        })
-                        to_create.images.append({
-                            'image_name': poster_name,
-                            'url_path': episode_data['episode_poster'],
-                            'path': season_path})
+                           season_path, 'episode', file_name):
+                        try:
+                            episode_data = \
+                            content.data['seasons'][season_num]['episodes'][
+                                episode_num]
+                            poster_name = f'{file_name}-thumb'
+                            to_create.nfos.append({
+                                'content': episode_data,
+                                'path': season_path,
+                                'content_type': 'episode',
+                                'file_name': file_name
+                            })
+
+                            to_create.images.append({
+                                'image_name': poster_name,
+                                'url_path': episode_data['episode_poster'],
+                                'path': season_path})
+                        except KeyError:
+                            logger.info(f'Ошибка при обработке '
+                                        f'{content.title} - {season_num} - '
+                                        f'{file}')
+    print(f'{content.title} -- отработан')
+
 
 class Content:
     def __init__(self, content_folder_name: str, content_type: str,
@@ -187,10 +203,10 @@ class ToCreate:
         self.nfos = []
 
     def create(self):
-        for nfo in self.nfos:
-            create_nfo(**nfo)
         for image in self.images:
             create_image(**image)
+        for nfo in self.nfos:
+            create_nfo(**nfo)
         print(f'Создано: nfo - {len(self.nfos)}, images - {len(self.images)}')
 
 def main():
@@ -213,6 +229,7 @@ def main():
                 for content_folder in contents_folders:
                     content = Content(content_folder, content_type)
                     if content.need_nfo_processing():
+                        print(content_folder)
                         if content.content_type == 'tv_show':
                             content.title, content.year = get_content_name_year(
                             content.folder_name, content.content_type)
@@ -236,7 +253,9 @@ def main():
                                         'title']
                                     episodes[
                                         episode_data['episode']] = episode_data
+
                             process_seasons(content, to_create)
+
                         else:
                             content.data = get_clean_info(raw_content, content_type, None)
                             file_name = content.file_name

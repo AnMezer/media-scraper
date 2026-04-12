@@ -7,11 +7,12 @@ load_dotenv()
 MEDIA_ROOT_PATH = os.getenv('media_root_path')
 MOVIES_FOLDER = 'Movies'
 CARTOONS_FOLDER = 'Cartoons'
-TV_SHOWS_FOLDER = 'Serials'
+TV_SHOWS_FOLDER = 'TV-Show'
 TELEGRAM_BOT_TOKEN = os.getenv('telegram_bot_token')
 TELEGRAM_CHAT_ID = os.getenv('telegram_chat_id')
 YEAR_STAMP = r'(19|20)\d{2}'
 VIDEO_EXT = ('.mp4', '.mkv', '.avi', '.mov')
+SPLITTERS = r'[_.()]'
 
 ENDPOINT_SEARCH_BY_KEYWORDS = 'https://kinopoiskapiunofficial.tech/api/v2.1/films/search-by-keyword'
 ENDPOINT_DATA_BY_FILM_ID = 'https://kinopoiskapiunofficial.tech/api/v2.2/films'
@@ -26,7 +27,7 @@ TMDB_MOVIE_CREDITS = 'https://api.themoviedb.org/3/movie/{}/credits'
 TMDB_GET_SEASON = 'https://api.themoviedb.org/3/tv/{}/season/{}'
 X_API_KEY = os.getenv('x_api_key')
 TMDB_TOKEN = os.getenv('tmdb_api_token')
-MAX_ACTORS = 10
+MAX_ACTORS = 15
 GET_ID_CACHE_SIZE = 100
 GET_ID_TTL = 60*60*24
 DAY_LIMIT = 500
@@ -34,15 +35,19 @@ SECOND_LIMIT = 4
 FILM_INFO_STRUCTURE = {
     'title': 'title',
     'originaltitle': 'original_title',
+    'belongs_to_collection': 'belongs_to_collection',
+    'tagline': 'tagline',
     'premiered': 'release_date',
     'plot': 'overview',
     'runtime': 'runtime',
-    'rating': 'vote_average',
-    'votes': 'vote_count',
+    'rating_themoviedb': 'vote_average',
+    'votes_themoviedb': 'vote_count',
     'genres': 'genres',
-    'TMDB_id': 'id',
-    'poster_path': 'poster_path',
-    'backdrop_path': 'backdrop_path'
+    'countries': 'production_countries',
+    'studios': 'production_companies',
+    'tmdb_id': 'id',
+    'poster_url': 'poster_path',
+    'fanart_url': 'backdrop_path'
 }
 TV_SHOW_INFO_STRUCTURE = {
     'title': 'name',
@@ -57,8 +62,8 @@ TV_SHOW_INFO_STRUCTURE = {
     'TMDB_id': 'id',
     'tagline': 'tagline',
     'seasons': 'seasons',
-    'poster_path': 'poster_path',
-    'backdrop_path': 'backdrop_path'
+    'poster_url': 'poster_path',
+    'fanart_url': 'backdrop_path'
 
 
 }

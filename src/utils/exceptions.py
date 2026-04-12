@@ -57,6 +57,10 @@ class NoContentError(ScraperError):
     def __str__(self) -> str:
         return 'Ответ API пуст'
 
+class SendMessageError(ScraperError):
+    def __str__(self) -> str:
+        return 'Ошибка при отправке сообщения в Telegram'
+
 
 class ALotOfContentError(ScraperError):
     """Не удалось однозначно идентифицировать произведение"""
@@ -66,6 +70,9 @@ class ResponseProcessingError(ScraperError):
 
 class CreateImageError(ScraperError):
     """Ошибка сохранения изображения"""
+
+class MissingTagError(ScraperError):
+    pass
     
 
 

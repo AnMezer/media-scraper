@@ -112,11 +112,9 @@ def is_nfo_file_exists(
         nfo_file_name = 'tvshow.nfo'
     else:
         nfo_file_name = f'{content_name}.nfo'
-    if nfo_file_name in [file.name for file in os.scandir(path)
-                         if file.is_file()]:
+    if os.path.isfile(os.path.join(path, nfo_file_name)):
         return True
     return False
-
 
 def get_content_name_year(
         raw_name: str, content_type: str) -> tuple[str, str | None]:
@@ -270,8 +268,8 @@ def get_content(
                       'headers': {'Authorization': f'Bearer {TMDB_TOKEN}'},
                       'params': {'query': content_title,
                                  'language': 'ru-Ru',
-                                 'year': content_year if content_year
-                                          else None}
+                                 'primary_release_year': content_year
+                                                    if content_year else None}
                       }
     content = fetch_data('json', **request_params)
 
@@ -309,16 +307,9 @@ def get_content(
     # Если кандидатов несколько, получаем список с их id
     if len(results) > 1:
         if content_type != 'tv_show':
-            # TODO: добавить логику фильтрации лишних фильмов
-            if content_title == 'Tomb Raider Лара Крофт':
-                content = get_content_by_id(338970, content_type)
-                return content
-            elif content_title == 'Van Helsing':
-                content = get_content_by_id(7131, content_type)
-                return content
-            elif content_title == 'In Time':
-                content = get_content_by_id(49530, content_type)
-                return content
+            # TODO: первый вариант в выдаче обычно искомый. Понаблюдать.
+            content = get_content_by_id(results[0]['id'], content_type)
+            return content
 
             # --------------------------------
         uncertainty_content_ids = []
@@ -337,6 +328,8 @@ def get_content(
         # TODO: Добавить создание файла с кандидатами, если не удалось
         #  оставить 1
         if len(candidates) > 1:
+            # TODO: Временно возвращаем первого кандидата
+            return candidates[0]
             problem_items = [f'{item["name"]}: {item["id"]}' for item in
                              candidates]
             error_msg = (f'Для {content_title} проверьте имя '
@@ -462,6 +455,7 @@ def create_nfo(
                      f'{type(e).__name__} - {str(e)}')
         raise NfoCreateError(error_msg) from e
 
+
 def create_image(image_name: str, url_path: str, path:str):
     """
     Загружает и создает изображения.
@@ -473,12 +467,10 @@ def create_image(image_name: str, url_path: str, path:str):
     Returns:
 
     """
-    validate_types_from_annotation()
     os.makedirs(path, exist_ok=True)
     url = f'{TMDB_IMAGES}{url_path}'
     image = fetch_data('content', url=url)
-    file_name = f'{image_name}.jpg'
-    file_path = os.path.join(path, file_name)
+    file_path = os.path.join(path, image_name)
     try:
         with open(file_path, 'wb') as f:
             f.write(image)
