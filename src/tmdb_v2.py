@@ -61,6 +61,19 @@ from utils.exceptions import ALotOfContentError, MissingTagError
 from utils.utils_v2 import (get_content_id, get_content_by_id, create_image,
                             get_main_cast, img_valid)
 
+MSG_FILE_NOT_DEFINED = (
+    'Не удалось идентифицировать видео-файл, он отсутствует или их несколько. '
+    'Проверьте папку: {folder}')
+MSG_PARSER_ERROR = (
+    'Не удалось распознать название фильма или год выпуска, '
+    'проверьте имя файла: {folder}/{file}')
+MSG_MANY_CANDIDATES = (
+    'При обработке {folder} найдено кандидатов: {quantity}.'
+)
+MSG_NO_ID_ERROR = (
+    'Не удалось получить ID фильма: {folder}/{file}'
+)
+
 logger_name = 'Media scraper_v2'
 logger = setup_logger(logger_name)
 bot = TeleBot(token=TELEGRAM_BOT_TOKEN)
@@ -100,6 +113,41 @@ class Content:
     # Технические
     candidates: set = field(default=None, metadata={'used': False})
 
+    def create_posters(self):
+        logger.info(f'Обработка постеров...')
+        for image_type in ('poster', 'fanart'):
+            img_name = f'{self.file_name}-{image_type}.jpg'
+            img_path = os.path.join(self.path, img_name)
+
+            need_create = False
+
+            if os.path.isfile(img_path):
+                logger.debug(
+                    f'"{image_type}" существует, проверка целостности...')
+                if img_valid(img_path):
+                    logger.debug('Файл исправен.')
+                else:
+                    logger.warning(f'"{image_type}" поврежден.')
+                    need_create = True
+            else:
+                logger.debug(f'"{image_type}" отсутствует.')
+                need_create = True
+
+            if need_create:
+                logger.debug(f'Приступаю к созданию {img_name}...')
+                create_image(img_name, self.poster_url, self.path)
+                if img_valid(img_path):
+                    logger.success(f'"{image_type}" успешно создан и '
+                                   f'проверен.')
+                    continue
+                else:
+                    logger.error(f'Ошибка при создании файла {img_name}')
+
+    def __post_init__(self):
+
+        if self.folder:
+            self.path = os.path.join(
+                MEDIA_ROOT_PATH, MOVIES_FOLDER, self.folder)
 
     class Meta:
         abstract = True
@@ -126,9 +174,7 @@ class Movie(Content):
     content_type: str = field(default='movie')
 
     def __post_init__(self):
-        if self.folder:
-            self.path = os.path.join(
-                MEDIA_ROOT_PATH, MOVIES_FOLDER, self.folder)
+        super().__post_init__()
 
         self.file  = self.get_video_file()
 
@@ -145,8 +191,8 @@ class Movie(Content):
 
     def need_nfo_processing(self):
         """Проверяет необходимость создания nfo файла"""
-        return not is_nfo_file_exists(
-            self.path, self.content_type, self.file_name)
+        return not os.path.isfile(
+            os.path.join(self.path, f'{self.file_name}.nfo'))
 
     def get_video_file(self):
         """Возвращает имя видео-файла
@@ -163,9 +209,12 @@ class Movie(Content):
             return files[0]
         return None
 
-    def is_base_info_exists(self):
+    def base_info_exists(self):
         """Проверяет наличие минимально необходимой информации о фильме"""
         if self.raw_title is None or self.year is None:
+            error_msg = MSG_PARSER_ERROR.format(
+                folder=self.folder, file=self.file)
+            logger.error(error_msg)
             return False
         return True
 
@@ -200,45 +249,6 @@ class Movie(Content):
             raise MissingTagError(f'У объекта отсутствуют атрибуты для пар: '
                                   f'{', '.join(missing_attrs)}')
 
-    def create_posters(self):
-        logger.info(f'Обработка постеров...')
-        for image_type in ('poster', 'fanart'):
-            img_name = f'{self.file_name}-{image_type}.jpg'
-            img_path = os.path.join(self.path, img_name)
-
-            need_create = False
-
-            if os.path.isfile(img_path):
-                logger.debug(
-                    f'"{image_type}" существует, проверка целостности...')
-                if img_valid(img_path):
-                    logger.debug('Файл исправен.')
-                else:
-                    logger.warning(f'"{image_type}" поврежден.')
-                    need_create = True
-            else:
-                logger.debug(f'"{image_type}" отсутствует.')
-                need_create = True
-
-            if need_create:
-                logger.debug(f'Приступаю к созданию {img_name}...')
-                create_image(img_name, self.poster_url, self.path)
-                if img_valid(img_path):
-                    logger.success(f'"{image_type}" успешно создан и '
-                                   f'проверен.')
-                    continue
-                else:
-                    logger.error(f'Ошибка при создании файла {img_name}')
-
-    def create_nfo(self):
-        logger.info(f'Создание nfo файла...')
-        try:
-            create_nfo(self)
-            logger.success(f'{self.file_name}.nfo создан.')
-        except Exception:
-            # TODO: Ловить исключения качественнее
-            logger.error(f'Ошибка при создании {self.file_name}.nfo')
-
     def create_photos(self):
         failed_images = []
         logger.info(f'Обработка фото актеров...')
@@ -261,18 +271,44 @@ class Movie(Content):
         else:
             logger.success(f'Фото актеров для {self.title} успешно обработаны.')
 
+    def file_defined(self):
+        if self.file is None:
+            error_msg = MSG_FILE_NOT_DEFINED.format(folder=self.folder)
+            logger.error(error_msg)
+            return False
+        return True
+
+    def id_defined(self):
+        if not self.tmdb_id and self.candidates:
+            error_msg = MSG_MANY_CANDIDATES.format(
+                folder=self.folder, quantity=len(self.candidates))
+            logger.error(error_msg)
+            return False
+        if not self.tmdb_id and not self.candidates:
+            error_msg = MSG_NO_ID_ERROR.format(
+                folder=self.folder, file=self.file)
+            logger.error(error_msg)
+        return True
+
+    def create_nfo(self):
+        logger.info(f'Создание nfo файла...')
+        try:
+            create_nfo(self)
+            logger.success(f'{self.file_name}.nfo создан.')
+        except Exception:
+            # TODO: Ловить исключения качественнее
+            logger.error(f'Ошибка при создании {self.file_name}.nfo')
 
 @dataclass
 class TvShow(Content):
 
     def need_nfo_processing(self):
-        nfo_file_name = 'tvshow.nfo'
-        path = os.path.join(MEDIA_ROOT_PATH, TV_SHOWS_FOLDER, self.folder)
-        nfo_file_path = os.path.join(path, nfo_file_name)
-        if os.path.isfile(nfo_file_path):
-            return False
-        return True
+        return not os.path.isfile(os.path.join(
+            MEDIA_ROOT_PATH, TV_SHOWS_FOLDER, self.folder, 'tvshow.nfo')
+        )
 
+    def __post_init__(self):
+        super().__post_init__()
 
 
 @dataclass
@@ -295,43 +331,20 @@ def main():
                 if folder in problem_items:
                     continue
                 movie = Movie(folder)
-
-                if movie.file is None:
-                    error_msg = (f'Не удалось идентифицировать видео-файл, '
-                                 f'он отсутствует или их несколько. '
-                                 f'Проверьте папку: {movie.folder}')
-                    logger.error(error_msg)
-                    latest_error_msg = error_msg
+                if not movie.file_defined():
                     continue
 
                 if movie.need_nfo_processing():
-                    logger.warning('- ' * 30)
-                    logger.warning(f'Обработка {movie.folder}. ')
+                    logger.debug('- ' * 30)
+                    logger.debug(f'Обработка {movie.folder}.')
 
-                    if not movie.is_base_info_exists():
-                        error_msg = (
-                            f'Не удалось распознать название фильма '
-                            f'или год выпуска, проверьте имя файла: '
-                            f'{movie.file}')
-                        logger.error(error_msg)
-                        latest_error_msg = error_msg
+                    if not movie.base_info_exists():
                         problem_items.append(movie.folder)
                         continue
 
                     movie.get_tmdb_id()
-                    if not movie.tmdb_id and movie.candidates:
-                        logger.error(
-                            f'При обработке {movie.folder} найдено '
-                            f'вариантов: {len(movie.candidates)}.'
-                        )
+                    if not movie.id_defined():
                         problem_items.append(movie.folder)
-                        continue
-
-                    if not movie.tmdb_id:
-                        error_msg = (f'Не удалось получить ID фильма: '
-                                     f'{movie.file}')
-                        logger.error(error_msg)
-                        latest_error_msg = error_msg
                         continue
 
                     content = get_content_by_id(movie.tmdb_id,
